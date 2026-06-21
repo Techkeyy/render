@@ -1,111 +1,68 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;450;500&display=swap');
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+:root{
+  --bg:#0b0b0e; --bg-2:#0f0f13; --surface:#16161b;
+  --border:rgba(255,255,255,.07); --border-strong:rgba(255,255,255,.14);
+  --text-1:#ececee; --text-2:#a6a6ae; --text-3:#6c6c76;
+  /* one precious accent — warm coin gold (the fare an agent pays) */
+  --accent:#e5b769; --accent-dim:rgba(229,183,105,.12); --accent-border:rgba(229,183,105,.32);
+  --font-serif:'Cormorant Garamond',Georgia,serif;
+  --font-num:'Space Grotesk',sans-serif;
+  --font-body:'Inter',system-ui,sans-serif;
+  --nav-h:70px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; background:var(--bg); color:var(--text-2);
+  font-family:var(--font-body); font-size:16px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+h1,h2,h3{ color:var(--text-1); font-weight:400; margin:0; }
+
+.num{ font-family:var(--font-num); font-variant-numeric:tabular-nums; font-feature-settings:'tnum' 1; letter-spacing:-.01em; }
+.serif{ font-family:var(--font-serif); }
+
+.eyebrow{
+  font-family:var(--font-num); font-size:10px; letter-spacing:.28em;
+  text-transform:uppercase; color:var(--text-3);
 }
 
-body {
-  margin: 0;
+.btn{
+  font-family:var(--font-num); font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+  padding:14px 30px; border-radius:5px; border:1px solid transparent; cursor:pointer;
+  display:inline-flex; align-items:center; gap:9px; text-decoration:none;
+  transition:transform .18s ease, background .18s ease, color .18s ease, border-color .18s ease;
+}
+.btn-primary{ background:var(--text-1); color:var(--bg); }
+.btn-primary:hover{ transform:scale(.97); background:var(--accent); }
+.btn-ghost{ background:transparent; color:var(--text-2); border-color:var(--border-strong); }
+.btn-ghost:hover{ transform:scale(.97); color:var(--accent); border-color:var(--accent-border); }
+
+.navlink{
+  font-family:var(--font-num); font-size:12px; letter-spacing:.04em; color:var(--text-2);
+  background:none; border:none; cursor:pointer; padding:6px 2px;
+  transition:color .16s ease;
+}
+.navlink:hover{ color:var(--text-1); }
+
+section[id]{ scroll-margin-top:var(--nav-h); }
+
+/* the little gold fare-coin marker (no emoji) */
+.coin{
+  width:9px; height:9px; border-radius:50%; flex:none; display:inline-block;
+  background:radial-gradient(circle at 35% 30%, #f3d39a, var(--accent));
+  box-shadow:0 0 8px rgba(229,183,105,.55);
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
+.card{ background:var(--bg-2); border:1px solid var(--border); border-radius:12px; }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
+::selection{ background:var(--accent-dim); color:var(--text-1); }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+@media (max-width:860px){
+  .hide-sm{ display:none !important; }
+  .hero-grid, .why-grid, .uses-grid{ grid-template-columns:1fr !important; gap:40px !important; }
+  h1.serif{ font-size:44px !important; }
 }
