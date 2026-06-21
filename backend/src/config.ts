@@ -37,11 +37,12 @@ export const config = {
   renderServiceUrl: process.env.RENDER_SERVICE_URL ?? "http://localhost:4000",
   orchestratorPort: Number(process.env.ORCHESTRATOR_PORT ?? 4100),
 
-  // --- Agent brain (Claude) ---
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
-  // Fast model for the per-page decide/extract loop; capable model for plan + synthesis.
-  modelLoop: process.env.MODEL_LOOP ?? "claude-sonnet-4-6",
-  modelPlan: process.env.MODEL_PLAN ?? "claude-opus-4-8",
+  // --- Agent brain (OpenAI-compatible; defaults to DeepSeek) ---
+  llmApiKey: process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
+  llmBaseUrl: process.env.LLM_BASE_URL ?? "https://api.deepseek.com",
+  // Model for the per-page decide/extract loop, and for plan + synthesis.
+  modelLoop: process.env.MODEL_LOOP ?? "deepseek-chat",
+  modelPlan: process.env.MODEL_PLAN ?? "deepseek-chat",
 
   // --- Safety caps ---
   maxPagesPerTask: Number(process.env.MAX_PAGES_PER_TASK ?? 12),

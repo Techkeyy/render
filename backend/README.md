@@ -39,8 +39,8 @@ The agent's wallet → render-service payment is a **real settlement on Arc**.
 | `src/orchestrator.ts` | HTTP API the frontend calls (`POST /task`, SSE) |
 | `src/generate-wallets.ts` | creates the seller + agent wallets |
 
-Models: **Opus 4.8** plans and synthesizes; **Sonnet 4.6** runs the per-page
-decide/extract loop (it runs many times per task).
+Brain: an OpenAI-compatible endpoint (**DeepSeek** `deepseek-chat` by default;
+set `LLM_BASE_URL` / `MODEL_PLAN` / `MODEL_LOOP` to use another provider).
 
 Arc Testnet: chain `eip155:5042002`, RPC `rpc.testnet.arc.network`, USDC
 `0x3600…0000`, Gateway facilitator `gateway-api-testnet.circle.com`.
@@ -56,7 +56,7 @@ npm run generate-wallets          # writes seller + agent keys to .env.local
 Then:
 1. Fund the **agent** wallet with Arc Testnet USDC at https://faucet.circle.com/
    (this pays for renders + gas).
-2. Add `ANTHROPIC_API_KEY=...` to `.env.local` (the agent's brain).
+2. Add `DEEPSEEK_API_KEY=...` to `.env.local` (the agent's brain).
 
 ```bash
 npm run render-service            # seller  on :4000

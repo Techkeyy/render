@@ -32,7 +32,7 @@ const values: Record<string, string> = {
   AGENT_PRIVATE_KEY: agent.privateKey,
 };
 for (const [k, v] of Object.entries(values)) content = upsert(content, k, v);
-if (!/^ANTHROPIC_API_KEY=/m.test(content)) content = upsert(content, "ANTHROPIC_API_KEY", "");
+if (!/^DEEPSEEK_API_KEY=/m.test(content)) content = upsert(content, "DEEPSEEK_API_KEY", "");
 fs.writeFileSync(envPath, content.trimEnd() + "\n");
 
 console.log(`\nWritten to ${envPath}`);
@@ -41,7 +41,7 @@ Next steps:
   1. Fund the AGENT wallet with Arc Testnet USDC (this pays for renders + gas):
        https://faucet.circle.com/
        Paste: ${agent.address}
-  2. Add your ANTHROPIC_API_KEY to .env.local (the agent's brain).
+  2. Add your DEEPSEEK_API_KEY to .env.local (the agent's brain).
   3. Start the render service:   npm run render-service
   4. Start the orchestrator:     npm run orchestrator
 `);

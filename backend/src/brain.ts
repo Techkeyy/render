@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
 import { config } from "./config.ts";
 
@@ -12,13 +12,13 @@ import { config } from "./config.ts";
  * budget is left, is opening the next page worth the fare?" That's the agent
  * deciding how to spend, not just automating a fixed list.
  *
- * We get structured output by forcing a single tool call and reading its input,
- * then validating it with zod. (Works on the GA Messages API — no preview deps.)
+ * Uses an OpenAI-compatible endpoint (DeepSeek by default) in JSON mode, with
+ * zod validating the shape of every response.
  */
 
-const client = new Anthropic({ apiKey: config.anthropicApiKey || undefined });
+const client = new OpenAI({ apiKey: config.llmApiKey, baseURL: config.llmBaseUrl });
 
-// --- schemas (zod for runtime validation + TS types) ---
+// --- schemas (zod validates the model's JSON; z.infer gives the TS types) ---
 const PlanSchema = z.object({
   reasoning: z.string(),
   extraction_goal: z.string(),
@@ -41,80 +41,30 @@ const AnswerSchema = z.object({
 });
 export type Answer = z.infer<typeof AnswerSchema>;
 
-// --- tool definitions (JSON schema the model fills in) ---
-const planTool: Anthropic.Tool = {
-  name: "submit_plan",
-  description: "Submit the ranked list of pages worth opening to achieve the goal.",
-  input_schema: {
-    type: "object",
-    properties: {
-      reasoning: { type: "string", description: "brief: why these pages, in this order" },
-      extraction_goal: { type: "string", description: "what to pull from each page to answer the goal" },
-      urls: {
-        type: "array",
-        description: "pages ranked best-first, capped to the budget",
-        items: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "a full http(s) URL worth opening" },
-            why: { type: "string", description: "what you expect this page to contribute" },
-          },
-          required: ["url", "why"],
-        },
-      },
-    },
-    required: ["reasoning", "extraction_goal", "urls"],
-  },
-};
-
-const assessTool: Anthropic.Tool = {
-  name: "submit_assessment",
-  description: "Report what the page contributed and decide whether to keep spending.",
-  input_schema: {
-    type: "object",
-    properties: {
-      finding: { type: "string", description: "what this page contributed, or 'nothing relevant'" },
-      relevant: { type: "boolean" },
-      enough_to_answer: { type: "boolean", description: "true if we can now answer the goal well" },
-      worth_continuing: { type: "boolean", description: "if budget remains, is opening another page worth the fare?" },
-      reason: { type: "string", description: "one sentence on the spend decision" },
-    },
-    required: ["finding", "relevant", "enough_to_answer", "worth_continuing", "reason"],
-  },
-};
-
-const answerTool: Anthropic.Tool = {
-  name: "submit_answer",
-  description: "Submit the final answer to the user's goal.",
-  input_schema: {
-    type: "object",
-    properties: {
-      answer: { type: "string", description: "the direct answer, citing what was found" },
-      confidence: { type: "string", enum: ["high", "medium", "low"] },
-    },
-    required: ["answer", "confidence"],
-  },
-};
-
-async function callTool<T>(opts: {
+async function jsonCall<T>(opts: {
   model: string;
   maxTokens: number;
   system: string;
   user: string;
-  tool: Anthropic.Tool;
   schema: z.ZodType<T>;
 }): Promise<T> {
-  const msg = await client.messages.create({
+  const res = await client.chat.completions.create({
     model: opts.model,
     max_tokens: opts.maxTokens,
-    tools: [opts.tool],
-    tool_choice: { type: "tool", name: opts.tool.name },
-    system: opts.system,
-    messages: [{ role: "user", content: opts.user }],
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: opts.system },
+      { role: "user", content: opts.user },
+    ],
   });
-  const block = msg.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === opts.tool.name);
-  if (!block) throw new Error(`brain: model did not call ${opts.tool.name}`);
-  return opts.schema.parse(block.input);
+  const content = res.choices[0]?.message?.content ?? "";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error(`brain: model did not return JSON: ${content.slice(0, 200)}`);
+  }
+  return opts.schema.parse(parsed);
 }
 
 export async function plan(opts: {
@@ -128,19 +78,21 @@ export async function plan(opts: {
     ? `The user supplied these pages to work from:\n${opts.seedUrls.map((u) => `- ${u}`).join("\n")}`
     : `The user supplied no pages. Propose full, real, openable URLs likely to answer the goal.`;
 
-  const p = await callTool({
+  const p = await jsonCall({
     model: config.modelPlan,
     maxTokens: 1500,
-    tool: planTool,
     schema: PlanSchema,
     system:
       "You plan web errands for an agent that pays a small fare to open each page. " +
       "Opening a page costs real money, so only include pages genuinely worth opening, " +
-      "ranked best-first, and never more than the budget allows.",
+      "ranked best-first, and never more than the budget allows.\n" +
+      'Respond ONLY with a JSON object of exactly this shape: ' +
+      '{"reasoning": string, "extraction_goal": string, "urls": [{"url": string, "why": string}]}. ' +
+      "extraction_goal says what to pull from each page to answer the goal.",
     user:
       `Goal: ${opts.goal}\n\n${seeds}\n\n` +
       `Budget: $${opts.budgetUsdc.toFixed(4)} at $${opts.pricePerPage} per page ` +
-      `(so at most ${maxPages} pages). Return at most ${maxPages} URLs.`,
+      `(so at most ${maxPages} pages). Return at most ${maxPages} URLs in the "urls" array.`,
   });
   return { ...p, urls: p.urls.slice(0, maxPages) };
 }
@@ -156,15 +108,17 @@ export async function assess(opts: {
   pricePerPage: number;
 }): Promise<Assessment> {
   const canAffordMore = opts.remainingBudgetUsdc >= opts.pricePerPage;
-  return callTool({
+  return jsonCall({
     model: config.modelLoop,
     maxTokens: 900,
-    tool: assessTool,
     schema: AssessSchema,
     system:
       "You read one web page for an errand agent and extract only what matters for the goal. " +
       "Then you make a spending decision: each extra page costs a fare, so say whether opening " +
-      "another is worth it given what is already known and the budget left.",
+      "another is worth it given what is already known and the budget left.\n" +
+      'Respond ONLY with a JSON object of exactly this shape: ' +
+      '{"finding": string, "relevant": boolean, "enough_to_answer": boolean, "worth_continuing": boolean, "reason": string}. ' +
+      "finding is what this page contributed (or 'nothing relevant'); reason is one sentence on the spend decision.",
     user:
       `Goal: ${opts.goal}\n` +
       `What to extract: ${opts.extractionGoal}\n` +
@@ -177,14 +131,15 @@ export async function assess(opts: {
 }
 
 export async function synthesize(opts: { goal: string; findings: string[] }): Promise<Answer> {
-  return callTool({
+  return jsonCall({
     model: config.modelPlan,
     maxTokens: 1200,
-    tool: answerTool,
     schema: AnswerSchema,
     system:
       "You answer the user's goal using only the findings the agent gathered from the pages it opened. " +
-      "Be direct and concrete. If the findings are thin, say so and lower the confidence.",
+      "Be direct and concrete. If the findings are thin, say so and lower the confidence.\n" +
+      'Respond ONLY with a JSON object of exactly this shape: ' +
+      '{"answer": string, "confidence": "high" | "medium" | "low"}.',
     user:
       `Goal: ${opts.goal}\n\nFindings gathered:\n` +
       (opts.findings.length ? opts.findings.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(no useful findings)"),
