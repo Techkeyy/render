@@ -1,13 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;450;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;450;500&display=swap');
 
 :root{
-  --bg:#0b0b0e; --bg-2:#0f0f13; --surface:#16161b;
-  --border:rgba(255,255,255,.07); --border-strong:rgba(255,255,255,.14);
-  --text-1:#ececee; --text-2:#a6a6ae; --text-3:#6c6c76;
-  /* one precious accent — warm coin gold (the fare an agent pays) */
-  --accent:#e5b769; --accent-dim:rgba(229,183,105,.12); --accent-border:rgba(229,183,105,.32);
+  /* warm light editorial — no pure white, no pure black */
+  --bg:#F7F5EF; --bg-2:#FCFBF7; --surface:#FFFFFF;
+  --border:rgba(26,24,19,.10); --border-strong:rgba(26,24,19,.20);
+  --text-1:#1A1813; --text-2:#57544B; --text-3:#938E80;
+  /* one precious accent — burnished coin bronze (the fare an agent pays) */
+  --accent:#A6741A; --accent-dim:rgba(166,116,26,.10); --accent-border:rgba(166,116,26,.34);
   --font-serif:'Cormorant Garamond',Georgia,serif;
   --font-num:'Space Grotesk',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
   --font-body:'Inter',system-ui,sans-serif;
   --nav-h:70px;
 }
@@ -26,43 +28,47 @@ h1,h2,h3{ color:var(--text-1); font-weight:400; margin:0; }
 .serif{ font-family:var(--font-serif); }
 
 .eyebrow{
-  font-family:var(--font-num); font-size:10px; letter-spacing:.28em;
+  font-family:var(--font-mono); font-size:10.5px; letter-spacing:.26em;
   text-transform:uppercase; color:var(--text-3);
 }
 
 .btn{
-  font-family:var(--font-num); font-size:11px; letter-spacing:.18em; text-transform:uppercase;
-  padding:14px 30px; border-radius:5px; border:1px solid transparent; cursor:pointer;
-  display:inline-flex; align-items:center; gap:9px; text-decoration:none;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  padding:13px 26px; border-radius:999px; border:1px solid transparent; cursor:pointer;
+  display:inline-flex; align-items:center; gap:9px; text-decoration:none; white-space:nowrap;
   transition:transform .18s ease, background .18s ease, color .18s ease, border-color .18s ease;
 }
-.btn-primary{ background:var(--text-1); color:var(--bg); }
-.btn-primary:hover{ transform:scale(.97); background:var(--accent); }
-.btn-ghost{ background:transparent; color:var(--text-2); border-color:var(--border-strong); }
+/* button law: shrink on hover, flip toward accent — never grow */
+.btn-primary{ background:var(--text-1); color:var(--bg-2); }
+.btn-primary:hover{ transform:scale(.97); background:var(--accent); color:#fff; }
+.btn-ghost{ background:transparent; color:var(--text-1); border-color:var(--border-strong); }
 .btn-ghost:hover{ transform:scale(.97); color:var(--accent); border-color:var(--accent-border); }
 
 .navlink{
-  font-family:var(--font-num); font-size:12px; letter-spacing:.04em; color:var(--text-2);
-  background:none; border:none; cursor:pointer; padding:6px 2px;
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.04em; color:var(--text-2);
+  background:none; border:none; cursor:pointer; padding:6px 2px; text-transform:uppercase;
   transition:color .16s ease;
 }
 .navlink:hover{ color:var(--text-1); }
 
 section[id]{ scroll-margin-top:var(--nav-h); }
 
-/* the little gold fare-coin marker (no emoji) */
+/* the little bronze fare-coin marker (no emoji) */
 .coin{
   width:9px; height:9px; border-radius:50%; flex:none; display:inline-block;
-  background:radial-gradient(circle at 35% 30%, #f3d39a, var(--accent));
-  box-shadow:0 0 8px rgba(229,183,105,.55);
+  background:radial-gradient(circle at 35% 30%, #e9c477, var(--accent));
+  box-shadow:0 0 0 3px rgba(166,116,26,.10);
 }
 
-.card{ background:var(--bg-2); border:1px solid var(--border); border-radius:12px; }
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:0 1px 2px rgba(26,24,19,.04), 0 18px 40px -28px rgba(26,24,19,.22);
+}
 
 ::selection{ background:var(--accent-dim); color:var(--text-1); }
 
 @media (max-width:860px){
   .hide-sm{ display:none !important; }
   .hero-grid, .why-grid, .uses-grid{ grid-template-columns:1fr !important; gap:40px !important; }
-  h1.serif{ font-size:44px !important; }
+  h1.serif{ font-size:46px !important; }
 }

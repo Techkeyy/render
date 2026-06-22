@@ -32,10 +32,7 @@ function ReceiptCard() {
             <span className="num" style={{ fontSize: 13, color: "var(--text-2)", minWidth: 138 }}>{r.site}</span>
             <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>paid ${r.paid}</span>
             <span style={{ flex: 1 }} />
-            <span
-              className="num"
-              style={{ fontSize: 13, color: r.best ? "var(--accent)" : "var(--text-2)" }}
-            >
+            <span className="num" style={{ fontSize: 13, color: r.best ? "var(--accent)" : "var(--text-2)" }}>
               {r.note}{r.best ? "  ↙ cheapest" : ""}
             </span>
           </div>
@@ -52,9 +49,21 @@ function ReceiptCard() {
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
     <div style={{ flex: 1, minWidth: 240 }}>
-      <div className="num" style={{ fontSize: 13, color: "var(--accent)", marginBottom: 14 }}>{n}</div>
-      <h3 className="serif" style={{ fontSize: 26, marginBottom: 10, lineHeight: 1.2 }}>{title}</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <span className="num" style={{ fontSize: 13, color: "var(--accent)" }}>{n}</span>
+        <span style={{ height: 1, flex: 1, background: "var(--border)" }} />
+      </div>
+      <h3 className="serif" style={{ fontSize: 27, marginBottom: 10, lineHeight: 1.15 }}>{title}</h3>
       <p style={{ margin: 0, fontSize: 15.5, color: "var(--text-2)" }}>{body}</p>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="card" style={{ padding: 24 }}>
+      <div className="num serif" style={{ fontSize: 44, color: "var(--accent)", lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 14.5, color: "var(--text-2)", marginTop: 8 }}>{label}</div>
     </div>
   );
 }
@@ -78,7 +87,7 @@ export default function App() {
         style={{
           position: "fixed", top: 0, left: 0, right: 0, height: "var(--nav-h)", zIndex: 50,
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 32px", background: "rgba(11,11,14,.72)", backdropFilter: "blur(12px)",
+          padding: "0 32px", background: "rgba(247,245,239,.78)", backdropFilter: "blur(12px)",
           borderBottom: "1px solid var(--border)",
         }}
       >
@@ -94,18 +103,18 @@ export default function App() {
       </nav>
 
       {/* ---------- HERO ---------- */}
-      <header style={{ padding: "calc(var(--nav-h) + 90px) 32px 100px" }}>
+      <header style={{ padding: "calc(var(--nav-h) + 88px) 32px 100px" }}>
         <div className="hero-grid" style={{ maxWidth: maxw, margin: "0 auto", display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 64, alignItems: "center" }}>
           <div>
             <div className="eyebrow" style={{ marginBottom: 22 }}>An agent that runs your internet errands</div>
-            <h1 className="serif" style={{ fontSize: 60, lineHeight: 1.05, letterSpacing: "-.01em", marginBottom: 22 }}>
+            <h1 className="serif" style={{ fontSize: 62, lineHeight: 1.04, letterSpacing: "-.01em", marginBottom: 22 }}>
               Send it to check a&nbsp;hundred websites.<br />
               <span style={{ color: "var(--text-2)" }}>Get back one answer.</span>
             </h1>
             <p style={{ fontSize: 18, color: "var(--text-2)", maxWidth: 520, marginBottom: 34 }}>
-              Give it a job and a tiny budget. It goes out, opens the pages itself —
-              even the modern ones other assistants can't read — and comes back with the
-              answer plus a receipt of every fraction of a cent it spent.
+              Give it a job and a budget it can't cross. It goes out, opens the pages
+              itself — even the modern ones other assistants can't read — and comes back
+              with the answer plus a receipt of every fraction of a cent it spent.
             </p>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
               <button className="btn btn-primary" onClick={scrollTo("try")}>Try a task</button>
@@ -116,27 +125,27 @@ export default function App() {
         </div>
       </header>
 
-      {/* ---------- HOW IT WORKS ---------- */}
-      <section id="how" style={{ padding: "120px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>
+      {/* ---------- THE MECHANISM ---------- */}
+      <section id="how" style={{ padding: "118px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>
         <div style={{ maxWidth: maxw, margin: "0 auto" }}>
-          <div className="eyebrow" style={{ marginBottom: 16 }}>How it works</div>
-          <h2 className="serif" style={{ fontSize: 40, marginBottom: 64, maxWidth: 620, lineHeight: 1.12 }}>
-            Like texting a tireless intern who works for pennies.
+          <div className="eyebrow" style={{ marginBottom: 16 }}>The mechanism</div>
+          <h2 className="serif" style={{ fontSize: 42, marginBottom: 64, maxWidth: 640, lineHeight: 1.12 }}>
+            Room to roam, on a leash it can't slip.
           </h2>
           <div style={{ display: "flex", gap: 48, flexWrap: "wrap" }}>
-            <Step n="01" title="Tell it the job" body="In plain English, like a text. “Which of these shops has the cheapest PS5 right now?” Set a spending cap so it can never overspend." />
-            <Step n="02" title="It does the legwork" body="It opens each page one by one — and you watch it tick by live. Every peek costs a sliver of a cent, so you can see it's really out there working." />
-            <Step n="03" title="You get the answer" body="The cheapest price, the listings that fit, the result — plus a receipt showing exactly where every cent went and how much came back unused." />
+            <Step n="01" title="Set the job and the budget" body="In plain English, like a text — plus a spending cap. The budget is the leash: the agent can spend up to it and not a cent more." />
+            <Step n="02" title="It does the legwork" body="It opens each page one at a time, paying a sliver of a cent to read it — and you watch every fare tick by, live." />
+            <Step n="03" title="You get the answer + receipt" body="The result, plus a receipt showing exactly where every cent went and how much budget came back unspent." />
           </div>
         </div>
       </section>
 
       {/* ---------- WHY IT'S DIFFERENT ---------- */}
-      <section id="why" style={{ padding: "120px 32px", borderTop: "1px solid var(--border)" }}>
+      <section id="why" style={{ padding: "118px 32px", borderTop: "1px solid var(--border)" }}>
         <div className="why-grid" style={{ maxWidth: maxw, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "center" }}>
           <div>
             <div className="eyebrow" style={{ marginBottom: 16 }}>Why it's different</div>
-            <h2 className="serif" style={{ fontSize: 40, lineHeight: 1.12, marginBottom: 22 }}>
+            <h2 className="serif" style={{ fontSize: 42, lineHeight: 1.12, marginBottom: 22 }}>
               It can actually see the pages other assistants can't.
             </h2>
             <p style={{ fontSize: 16.5, color: "var(--text-2)", marginBottom: 18 }}>
@@ -146,28 +155,22 @@ export default function App() {
             </p>
             <p style={{ fontSize: 16.5, color: "var(--text-2)", margin: 0 }}>
               That work isn't free — opening a page takes real computing power. So render
-              pays a fraction of a cent for each one, only when it actually needs it. No
+              pays a fraction of a cent for each one, only when it needs it. No
               subscription, no monthly bill. You pay for the peeking, nothing more.
             </p>
           </div>
           <div style={{ display: "grid", gap: 18 }}>
-            <div className="card" style={{ padding: 24 }}>
-              <div className="num serif" style={{ fontSize: 44, color: "var(--accent)", lineHeight: 1 }}>~$0.001</div>
-              <div style={{ fontSize: 14.5, color: "var(--text-2)", marginTop: 8 }}>per page it opens — too small to charge on a card, normal here.</div>
-            </div>
-            <div className="card" style={{ padding: 24 }}>
-              <div className="num serif" style={{ fontSize: 44, color: "var(--text-1)", lineHeight: 1 }}>0</div>
-              <div style={{ fontSize: 14.5, color: "var(--text-2)", marginTop: 8 }}>subscriptions, logins, or card details to hand over.</div>
-            </div>
+            <Stat value="~$0.001" label="per page it opens — too small to charge on a card, normal here." />
+            <Stat value="0" label="subscriptions, logins, or card details to hand over." />
           </div>
         </div>
       </section>
 
       {/* ---------- USE CASES ---------- */}
-      <section id="uses" style={{ padding: "120px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>
+      <section id="uses" style={{ padding: "118px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>
         <div style={{ maxWidth: maxw, margin: "0 auto" }}>
           <div className="eyebrow" style={{ marginBottom: 16 }}>Use it for</div>
-          <h2 className="serif" style={{ fontSize: 40, marginBottom: 56, maxWidth: 620, lineHeight: 1.12 }}>
+          <h2 className="serif" style={{ fontSize: 42, marginBottom: 56, maxWidth: 640, lineHeight: 1.12 }}>
             The errands that are death by a thousand tabs.
           </h2>
           <div className="uses-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
@@ -180,17 +183,17 @@ export default function App() {
       </section>
 
       {/* ---------- TRY (placeholder for the live app) ---------- */}
-      <section id="try" style={{ padding: "130px 32px", borderTop: "1px solid var(--border)", textAlign: "center" }}>
+      <section id="try" style={{ padding: "126px 32px", borderTop: "1px solid var(--border)", textAlign: "center" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <div className="eyebrow" style={{ marginBottom: 18 }}>Try a task</div>
-          <h2 className="serif" style={{ fontSize: 46, lineHeight: 1.1, marginBottom: 20 }}>
+          <h2 className="serif" style={{ fontSize: 48, lineHeight: 1.1, marginBottom: 20 }}>
             Give it a job. Watch it pay its way.
           </h2>
           <p style={{ fontSize: 17, color: "var(--text-2)", marginBottom: 34 }}>
             The live version is coming together now — you'll start with a small balance on us,
             so you can try it without signing up for anything.
           </p>
-          <button className="btn btn-primary" disabled style={{ opacity: .6, cursor: "default" }}>
+          <button className="btn btn-primary" disabled style={{ opacity: .55, cursor: "default" }}>
             Live demo · in progress
           </button>
         </div>
@@ -200,7 +203,7 @@ export default function App() {
       <footer style={{ padding: "44px 32px", borderTop: "1px solid var(--border)" }}>
         <div style={{ maxWidth: maxw, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
           <div className="num" style={{ fontSize: 15, color: "var(--text-1)", fontWeight: 600 }}>render</div>
-          <div className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
+          <div className="num" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
             An autonomous web-errand agent · built on Arc
           </div>
         </div>
