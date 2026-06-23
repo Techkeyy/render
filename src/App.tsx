@@ -1,3 +1,5 @@
+import TaskConsole from "./TaskConsole.tsx";
+
 const scrollTo = (id: string) => () =>
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
@@ -208,21 +210,19 @@ export default function App() {
         </div>
       </section>
 
-      {/* ---------- TRY (placeholder for the live app) ---------- */}
-      <section id="try" style={{ padding: "126px 32px", borderTop: "1px solid var(--border)", textAlign: "center" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      {/* ---------- TRY (the live task console) ---------- */}
+      <section id="try" style={{ padding: "126px 32px", borderTop: "1px solid var(--border)" }}>
+        <div style={{ maxWidth: 880, margin: "0 auto 40px", textAlign: "center" }}>
           <div className="eyebrow" style={{ marginBottom: 18 }}>Try a task</div>
           <h2 className="serif" style={{ fontSize: 48, lineHeight: 1.1, marginBottom: 20 }}>
             Give it a job. Watch it pay its way.
           </h2>
-          <p style={{ fontSize: 17, color: "var(--text-2)", marginBottom: 34 }}>
-            The live version is coming together now — you'll start with a small balance on us,
-            so you can try it without signing up for anything.
+          <p style={{ fontSize: 17, color: "var(--text-2)", maxWidth: 620, margin: "0 auto" }}>
+            Set a goal and a budget it can't cross. Every fare below is a real settlement on Arc —
+            you can click through to each one.
           </p>
-          <button className="btn btn-primary" disabled style={{ opacity: .55, cursor: "default" }}>
-            Live demo · in progress
-          </button>
         </div>
+        <TaskConsole />
       </section>
 
       {/* ---------- FOOTER ---------- */}
