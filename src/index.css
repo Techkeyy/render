@@ -71,4 +71,6 @@ section[id]{ scroll-margin-top:var(--nav-h); }
   .hide-sm{ display:none !important; }
   .hero-grid, .why-grid, .uses-grid{ grid-template-columns:1fr !important; gap:40px !important; }
   h1.serif{ font-size:46px !important; }
+  /* drop the photo backdrops on narrow screens — text would sit on top of them */
+  .hero-robot, .how-hands{ display:none !important; }
 }

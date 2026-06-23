@@ -103,8 +103,21 @@ export default function App() {
       </nav>
 
       {/* ---------- HERO ---------- */}
-      <header style={{ padding: "calc(var(--nav-h) + 88px) 32px 100px" }}>
-        <div className="hero-grid" style={{ maxWidth: maxw, margin: "0 auto", display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 64, alignItems: "center" }}>
+      <header style={{ position: "relative", overflow: "hidden", padding: "calc(var(--nav-h) + 88px) 32px 100px" }}>
+        {/* robot, resting under the words — toned to warm paper, faded into the page */}
+        <div
+          aria-hidden
+          className="hero-robot"
+          style={{
+            position: "absolute", top: 0, right: 0, bottom: 0, width: "50%",
+            backgroundImage: "url('/robot.jpg')", backgroundSize: "cover", backgroundPosition: "center right",
+            opacity: 0.13, filter: "grayscale(0.4) sepia(0.5) contrast(1.04)",
+            WebkitMaskImage: "radial-gradient(125% 92% at 88% 46%, #000 30%, transparent 78%)",
+            maskImage: "radial-gradient(125% 92% at 88% 46%, #000 30%, transparent 78%)",
+            pointerEvents: "none", zIndex: 0,
+          }}
+        />
+        <div className="hero-grid" style={{ position: "relative", zIndex: 1, maxWidth: maxw, margin: "0 auto", display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 64, alignItems: "center" }}>
           <div>
             <div className="eyebrow" style={{ marginBottom: 22 }}>An agent that runs your internet errands</div>
             <h1 className="serif" style={{ fontSize: 62, lineHeight: 1.04, letterSpacing: "-.01em", marginBottom: 22 }}>
@@ -126,8 +139,21 @@ export default function App() {
       </header>
 
       {/* ---------- THE MECHANISM ---------- */}
-      <section id="how" style={{ padding: "118px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>
-        <div style={{ maxWidth: maxw, margin: "0 auto" }}>
+      <section id="how" style={{ position: "relative", overflow: "hidden", padding: "118px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>
+        {/* the handshake — human reaching the machine, multiply drops its white field into the paper */}
+        <div
+          aria-hidden
+          className="how-hands"
+          style={{
+            position: "absolute", top: 0, right: 0, bottom: 0, width: "52%",
+            backgroundImage: "url('/handshake.jpg')", backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "right 18%",
+            mixBlendMode: "multiply", opacity: 0.42, filter: "sepia(0.32) saturate(1.05) contrast(1.02)",
+            WebkitMaskImage: "radial-gradient(120% 100% at 92% 30%, #000 32%, transparent 80%)",
+            maskImage: "radial-gradient(120% 100% at 92% 30%, #000 32%, transparent 80%)",
+            pointerEvents: "none", zIndex: 0,
+          }}
+        />
+        <div style={{ position: "relative", zIndex: 1, maxWidth: maxw, margin: "0 auto" }}>
           <div className="eyebrow" style={{ marginBottom: 16 }}>The mechanism</div>
           <h2 className="serif" style={{ fontSize: 42, marginBottom: 64, maxWidth: 640, lineHeight: 1.12 }}>
             Room to roam, on a leash it can't slip.
