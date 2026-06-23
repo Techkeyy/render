@@ -1,0 +1,32 @@
+# Render.com Blueprint — backend (seller + orchestrator) as one free web service.
+# Frontend deploys separately on Vercel; this is only the agent backend.
+#
+# Secrets (sync:false) are NOT stored here — Render prompts for them in the
+# dashboard on first deploy. Never commit wallet keys or the DeepSeek key.
+services:
+  - type: web
+    name: render-agent
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # the orchestrator reaches the seller over loopback inside the container
+      - key: RENDER_SERVICE_URL
+        value: http://127.0.0.1:4000
+      - key: RENDER_SERVICE_PORT
+        value: "4000"
+      # --- secrets: set these in the Render dashboard (sync:false = prompt) ---
+      - key: SELLER_ADDRESS
+        sync: false
+      - key: SELLER_PRIVATE_KEY
+        sync: false
+      - key: AGENT_ADDRESS
+        sync: false
+      - key: AGENT_PRIVATE_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false

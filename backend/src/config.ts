@@ -35,7 +35,8 @@ export const config = {
   // --- Service endpoints ---
   renderServicePort: Number(process.env.RENDER_SERVICE_PORT ?? 4000),
   renderServiceUrl: process.env.RENDER_SERVICE_URL ?? "http://localhost:4000",
-  orchestratorPort: Number(process.env.ORCHESTRATOR_PORT ?? 4100),
+  // Render/PaaS inject PORT; the orchestrator is the public service so it binds it.
+  orchestratorPort: Number(process.env.ORCHESTRATOR_PORT ?? process.env.PORT ?? 4100),
 
   // --- Agent brain (OpenAI-compatible; defaults to DeepSeek) ---
   llmApiKey: process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "",

@@ -8,6 +8,7 @@
     "generate-wallets": "tsx src/generate-wallets.ts",
     "render-service": "tsx src/render-service.ts",
     "orchestrator": "tsx src/orchestrator.ts",
+    "serve": "tsx src/serve.ts",
     "render-once": "tsx src/lib/render.ts",
     "typecheck": "tsc --noEmit"
   },

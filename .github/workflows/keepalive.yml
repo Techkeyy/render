@@ -1,0 +1,25 @@
+# Keeps the Render free backend warm so the live demo doesn't cold-start.
+# Render free services sleep after ~15 min idle (a ~50s wake + Chromium launch).
+# This pings /health every 10 min. Set repo Variable ORCHESTRATOR_URL to the
+# Render service URL (Settings -> Secrets and variables -> Actions -> Variables).
+#
+# Note: GitHub disables scheduled workflows after 60 days of repo inactivity,
+# and cron timing jitters by a few minutes. For a always-on alternative with no
+# repo changes, use a free pinger like cron-job.org against <url>/health.
+name: keep-warm
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping orchestrator /health
+        run: |
+          url="${{ vars.ORCHESTRATOR_URL }}"
+          if [ -z "$url" ]; then
+            echo "Set repo Variable ORCHESTRATOR_URL to your Render service URL."
+            exit 0
+          fi
+          curl -fsS --max-time 90 "$url/health" && echo "  warm"

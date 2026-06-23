@@ -1,0 +1,9 @@
+node_modules
+# never bake secrets into the image — Render injects these as env vars at runtime
+.env
+.env.local
+.env.*
+*.log
+npm-debug.log*
+dist
+.git

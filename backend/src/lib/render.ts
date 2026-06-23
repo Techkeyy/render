@@ -8,7 +8,18 @@ async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = chromium.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+      args: [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled",
+        // trim the footprint for 512 MB free-tier containers
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--mute-audio",
+      ],
     });
   }
   return browserPromise;
