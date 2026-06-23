@@ -1,73 +1,124 @@
-# React + TypeScript + Vite
+# render
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**An autonomous agent that runs your internet errands — on a budget it can't cross.**
 
-Currently, two official plugins are available:
+Give render a goal and a spending cap. It goes out, opens the pages itself —
+even the modern, JavaScript-heavy ones other assistants can't read — pays a
+fraction of a cent per page as it goes, and comes back with one answer plus a
+receipt of every fare it paid. The budget is the leash: it can spend up to the
+cap and not a cent more.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Built for the **Lepton Agents Hackathon** (Canteen × Circle × Arc).
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## The idea in one line
 
-## Expanding the ESLint configuration
+Most AI assistants hit a modern website and see a blank wall — the page never
+finishes loading for them. render opens each page in a real browser, and because
+that costs real compute, it **pays for each one** — `$0.001` in USDC, settled
+on **Arc** via **x402 + Circle Gateway**. Sub-cent, per-action, no subscription,
+no card on file. Every fare is a verifiable on-chain settlement.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+  you ──(goal + budget)──►  orchestrator  (plan → assess → synthesize)
+                                  │  pays $0.001 USDC per page  (x402, Arc)
+                                  ▼
+                            render-service  (Playwright) ──► page text
+                                  │
+  you ◄──(answer + receipt)──◄────┘
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The economic decision is the point: after each page, the agent asks *"given what
+I now know and how much budget is left, is opening the next page worth the
+fare?"* — so it spends like something with a wallet, not a script running a
+fixed list.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Architecture
+
+| Layer | What it does |
+|---|---|
+| **frontend** (`/src`) | Vite + React landing page and the live task console (watch the agent pay its way, fare by fare). |
+| **render-service** (`backend/src/render-service.ts`) | The **seller**. An x402-paywalled `GET /render?url=`. Pay `$0.001` USDC and it renders the page in headless Chromium and returns the human-visible text. SSRF-guarded. |
+| **orchestrator** (`backend/src/orchestrator.ts`) | The **buyer agent**. Given a goal + budget, plans which pages are worth opening, pays the render-service per page, decides after each whether it has enough, and synthesizes the answer — streaming the live receipt over SSE. |
+| **brain** (`backend/src/brain.ts`) | `plan()` · `assess()` (the spend decision) · `synthesize()`. OpenAI-compatible; **DeepSeek** `deepseek-chat` by default. |
+
+**Stack:** Arc Testnet (`eip155:5042002`) · Circle Gateway / x402-batching ·
+USDC (`0x3600…0000`) · Playwright · DeepSeek · viem · Express · React + Vite.
+
+---
+
+## Run it
+
+### Backend
+
+```bash
+cd backend
+npm install
+npx playwright install chromium
+npm run generate-wallets          # writes seller + agent keys to .env.local
 ```
+
+1. Fund the **agent** wallet with Arc Testnet USDC at <https://faucet.circle.com/>
+   (this pays for renders + gas).
+2. Add `DEEPSEEK_API_KEY=...` to `backend/.env.local` (the agent's brain).
+
+```bash
+npm run render-service            # seller  on :4000
+npm run orchestrator              # buyer   on :4100
+```
+
+Run an errand from the terminal (streams the receipt as it pays):
+
+```bash
+curl -N -X POST http://localhost:4100/task \
+  -H 'content-type: application/json' \
+  -d '{"goal":"Which of these has the lowest price?",
+       "seedUrls":["https://example.com/a","https://example.com/b"],
+       "budgetUsdc":0.02}'
+```
+
+### Frontend
+
+```bash
+npm install
+npm run dev                       # http://localhost:5173
+```
+
+---
+
+## Status & MVP scope
+
+**Done**
+
+- [x] `render-service` — x402-paywalled Playwright renderer, SSRF-guarded.
+- [x] `AgentWallet` — Circle Gateway deposit + pay-per-render.
+- [x] Agent brain — DeepSeek `plan` / `assess` / `synthesize`, JSON-validated.
+- [x] `orchestrator` — budget-bounded task loop, SSE live receipt.
+- [x] **End-to-end on real money** — real Arc settlements, answer returned, budget respected.
+- [x] Landing page — editorial light theme.
+
+**MVP (in progress)**
+
+- [ ] **Live task console** — type a goal + budget in the browser, watch the
+      agent plan, open pages, pay each fare, and return the answer + receipt,
+      streamed live. *(the centerpiece demo)*
+- [ ] Receipt rows link each fare to its Arc settlement on the explorer.
+- [ ] Visitor gets a small starting balance — try it without signing up.
+
+**After MVP**
+
+- [ ] Deploy (frontend + backend) and record the demo.
+- [ ] Submit by the hackathon deadline.
+
+---
+
+## Endpoints
+
+- `render-service` — `GET /health`, `GET /render?url=` (paywalled `$0.001`)
+- `orchestrator` — `GET /health`, `GET /balance`, `POST /task` (SSE stream of
+  `plan → open → paid → finding → stop → answer`)
+</content>
+</invoke>
