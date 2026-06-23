@@ -39,7 +39,8 @@ export const config = {
   orchestratorPort: Number(process.env.ORCHESTRATOR_PORT ?? process.env.PORT ?? 4100),
 
   // --- Agent brain (OpenAI-compatible; defaults to DeepSeek) ---
-  llmApiKey: process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
+  // .trim() guards against a stray space/newline pasted into a host's env UI
+  llmApiKey: (process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "").trim(),
   llmBaseUrl: process.env.LLM_BASE_URL ?? "https://api.deepseek.com",
   // Model for the per-page decide/extract loop, and for plan + synthesis.
   modelLoop: process.env.MODEL_LOOP ?? "deepseek-chat",
