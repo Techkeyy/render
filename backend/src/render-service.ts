@@ -3,7 +3,6 @@ import { createGatewayMiddleware } from "@circle-fin/x402-batching/server";
 import { formatUnits } from "viem";
 import { config } from "./config.ts";
 import { renderPage, assertSafeUrl, closeBrowser } from "./lib/render.ts";
-import { getPublisher } from "./publishers.ts";
 
 type PaidRequest = express.Request & {
   payment?: { verified: boolean; payer: string; amount: string; network: string; transaction?: string };
@@ -27,18 +26,23 @@ app.get("/health", (_req, res) =>
   res.json({ ok: true, service: "render-service", seller: config.sellerAddress, price: config.renderPrice }),
 );
 
+// Reject bad/internal URLs BEFORE the paywall, so a doomed request never costs
+// the agent a fare (and we never spend compute as an SSRF proxy).
+function requireSafeUrl(req: express.Request, res: express.Response, next: express.NextFunction) {
+  try {
+    assertSafeUrl(String(req.query.url ?? ""));
+    next();
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+}
+
 /**
  * The paid endpoint. Pay $0.001 in USDC (handled by the Gateway middleware),
  * and get back the fully-rendered, human-visible text of a page.
  */
-app.get("/render", gateway.require(config.renderPrice), async (req: PaidRequest, res) => {
+app.get("/render", requireSafeUrl, gateway.require(config.renderPrice), async (req: PaidRequest, res) => {
   const raw = String(req.query.url ?? "");
-  try {
-    assertSafeUrl(raw); // reject internal targets before we spend any compute
-  } catch (e) {
-    return res.status(400).json({ error: (e as Error).message });
-  }
-
   const pay = req.payment;
   const paidUsdc = pay ? formatUnits(BigInt(pay.amount), 6) : "0";
   console.log(`fare ${paidUsdc} USDC from ${pay?.payer ?? "?"} -> render ${raw}`);
@@ -62,38 +66,37 @@ app.get("/render", gateway.require(config.renderPrice), async (req: PaidRequest,
   }
 });
 
+// A real x402 settlement to whatever publisher wallet the buyer discovered.
+// The buyer spends its own USDC and designates the recipient, so collecting to
+// an arbitrary wallet here is safe — there's no third-party money to misdirect.
 const publisherGateways = new Map<string, ReturnType<typeof createGatewayMiddleware>>();
 
-function getPublisherGateway(pubId: string) {
-  if (publisherGateways.has(pubId)) return publisherGateways.get(pubId)!;
-  const pub = getPublisher(pubId);
-  if (!pub) return null;
-  const gw = createGatewayMiddleware({
-    sellerAddress: pub.wallet,
-    facilitatorUrl: config.gatewayFacilitator,
-    networks: [config.network],
-  });
-  publisherGateways.set(pubId, gw);
+function gatewayForWallet(wallet: `0x${string}`) {
+  let gw = publisherGateways.get(wallet);
+  if (!gw) {
+    gw = createGatewayMiddleware({
+      sellerAddress: wallet,
+      facilitatorUrl: config.gatewayFacilitator,
+      networks: [config.network],
+    });
+    publisherGateways.set(wallet, gw);
+  }
   return gw;
 }
 
 app.get("/tip", (req: PaidRequest, res, next) => {
-  const pubId = String(req.query.publisher ?? "");
-  const gw = getPublisherGateway(pubId);
-  if (!gw) return res.status(404).json({ error: `Unknown publisher: ${pubId}` });
-  gw.require(config.tipPrice)(req, res, next);
+  const wallet = String(req.query.wallet ?? "");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) {
+    return res.status(400).json({ error: "a valid publisher wallet (0x…) is required" });
+  }
+  gatewayForWallet(wallet as `0x${string}`).require(config.tipPrice)(req, res, next);
 }, (req: PaidRequest, res) => {
-  const pubId = String(req.query.publisher ?? "");
-  const pub = getPublisher(pubId)!;
+  const wallet = String(req.query.wallet ?? "");
+  const name = String(req.query.name ?? "publisher");
   const pay = req.payment;
   const tipUsdc = pay ? formatUnits(BigInt(pay.amount), 6) : "0";
-  console.log(`tip ${tipUsdc} USDC from ${pay?.payer ?? "?"} -> ${pub.name} (${pub.wallet})`);
-  res.json({
-    publisher: pub.name,
-    publisherWallet: pub.wallet,
-    tipUsdc,
-    settlementId: pay?.transaction ?? null,
-  });
+  console.log(`tip ${tipUsdc} USDC from ${pay?.payer ?? "?"} -> ${name} (${wallet})`);
+  res.json({ publisher: name, publisherWallet: wallet, tipUsdc, settlementId: pay?.transaction ?? null });
 });
 
 const server = app.listen(config.renderServicePort, () => {

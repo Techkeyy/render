@@ -1,6 +1,6 @@
 import { config } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
-import { findPublisher } from "./publishers.ts";
+import { discoverPublisher } from "./publishers.ts";
 import * as brain from "./brain.ts";
 
 export interface ReceiptRow {
@@ -58,12 +58,13 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
 
     while (queue.length > 0) {
       const url = queue[0]!;
-      const pageCost = price + (findPublisher(url) ? config.tipPriceUsdc : 0);
+      const pub = await discoverPublisher(url);
+      const pageCost = price + (pub ? config.tipPriceUsdc : 0);
       if (spent + pageCost > budget) {
         emit({ type: "stop", reason: "budget reached — staying within the cap" });
         break;
       }
-      queue.shift();;
+      queue.shift();
       if (visited.has(url)) continue;
       visited.add(url);
 
@@ -82,10 +83,9 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
       receipt.push({ url, title, paidUsdc: paid.paidUsdc, settlementId: paid.settlementId });
       emit({ type: "paid", url, title, paidUsdc: paid.paidUsdc, settlementId: paid.settlementId, spentUsdc: spent });
 
-      const pub = findPublisher(url);
       if (pub) {
         try {
-          const tip = await wallet.tipPublisher(pub.id);
+          const tip = await wallet.tipPublisher(pub.wallet, pub.name);
           spent += tip.tipUsdc;
           receipt.push({ url, title: `tip → ${tip.publisher}`, paidUsdc: tip.tipUsdc, settlementId: tip.settlementId });
           emit({ type: "tipped", url, publisher: tip.publisher, publisherWallet: tip.publisherWallet, tipUsdc: tip.tipUsdc, settlementId: tip.settlementId });

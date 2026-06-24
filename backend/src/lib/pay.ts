@@ -45,15 +45,16 @@ export class AgentWallet {
       data,
     };
   }
-  async tipPublisher(publisherId: string): Promise<{ tipUsdc: number; settlementId?: string; publisher: string; publisherWallet: string }> {
-    const target = `${config.renderServiceUrl}/tip?publisher=${encodeURIComponent(publisherId)}`;
+  /** Send the per-read tip to a publisher's own wallet (a real x402 settlement). */
+  async tipPublisher(wallet: string, name: string): Promise<{ tipUsdc: number; settlementId?: string; publisher: string; publisherWallet: string }> {
+    const target = `${config.renderServiceUrl}/tip?wallet=${encodeURIComponent(wallet)}&name=${encodeURIComponent(name)}`;
     const result = await this.gateway.pay(target, { method: "GET" });
     const data = result.data as { publisher: string; publisherWallet: string; tipUsdc: string; settlementId: string | null };
     return {
       tipUsdc: Number(data?.tipUsdc ?? config.tipPriceUsdc),
       settlementId: data?.settlementId ?? undefined,
-      publisher: data?.publisher ?? publisherId,
-      publisherWallet: data?.publisherWallet ?? "",
+      publisher: data?.publisher ?? name,
+      publisherWallet: data?.publisherWallet ?? wallet,
     };
   }
 }

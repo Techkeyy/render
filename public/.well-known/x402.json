@@ -1,0 +1,7 @@
+{
+  "name": "render (demo publisher)",
+  "wallet": "0x04FaFe065CF83b218Ccf9dfa1b7aB866F4cB0063",
+  "network": "eip155:5042002",
+  "asset": "USDC",
+  "note": "This is the x402 publisher-discovery file. Any site owner can host one of these to receive a USDC tip whenever an agent reads their page. See https://github.com/Techkeyy/render"
+}

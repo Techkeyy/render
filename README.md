@@ -44,6 +44,29 @@ fixed list.
 
 ---
 
+## Publishers get paid
+
+When the agent reads a page, the page's owner can get paid too. render looks up
+the site's **`/.well-known/x402.json`** — a file any site owner can host to
+declare their USDC wallet:
+
+```json
+{ "name": "Your Site", "wallet": "0x…", "network": "eip155:5042002", "asset": "USDC" }
+```
+
+If it's there, the agent settles a separate `$0.001` USDC tip straight to that
+wallet — a real, independent x402 settlement on Arc — and the receipt shows it.
+No registration, no middleman: one file on your domain and AI agents start
+paying you when they read your content. (A small pre-registered fallback list
+covers demo sites that haven't published the file yet.)
+
+This is the piece that closes the loop: the agent doesn't just pay its own
+infrastructure — it pays the people whose content it consumes. render hosts its
+own file at
+[`/.well-known/x402.json`](https://render-kmjq.vercel.app/.well-known/x402.json).
+
+---
+
 ## Architecture
 
 | Layer | What it does |
