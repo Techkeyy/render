@@ -38,6 +38,45 @@ function AgentBalance() {
   );
 }
 
+function LiveStats() {
+  const [s, setS] = useState<{ errands: number; users: number; settledUsdc: number; tippedUsdc: number } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetch(`${ORCH}/stats`)
+        .then((r) => r.json())
+        .then((d) => { if (live) setS(d); })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 20_000);
+    return () => { live = false; clearInterval(id); };
+  }, []);
+
+  if (!s || s.errands === 0) return null;
+
+  const total = (s.settledUsdc + s.tippedUsdc).toFixed(4);
+  const items = [
+    { value: String(s.errands), label: "errands run" },
+    { value: String(s.users), label: s.users === 1 ? "user" : "users" },
+    { value: `$${total}`, label: "USDC settled" },
+  ];
+  if (s.tippedUsdc > 0) items.push({ value: `$${s.tippedUsdc.toFixed(4)}`, label: "to publishers" });
+
+  return (
+    <div style={{ padding: "32px 32px", borderTop: "1px solid var(--border)", background: "var(--bg)" }}>
+      <div style={{ maxWidth: maxw, margin: "0 auto", display: "flex", justifyContent: "center", gap: 40, flexWrap: "wrap" }}>
+        {items.map((it) => (
+          <div key={it.label} style={{ textAlign: "center" }}>
+            <div className="num" style={{ fontSize: 28, color: "var(--accent)", fontWeight: 600 }}>{it.value}</div>
+            <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 4 }}>{it.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // --- illustrative receipt rows (a sample task, clearly labelled — not live data) ---
 const sampleRows = [
   { site: "webscraper.io/…/laptops", paid: "0.001", note: "Lenovo $321.94" },
@@ -167,6 +206,9 @@ export default function App() {
           <ReceiptCard />
         </div>
       </header>
+
+      {/* ---------- LIVE STATS ---------- */}
+      <LiveStats />
 
       {/* ---------- THE MECHANISM ---------- */}
       <section id="how" style={{ position: "relative", overflow: "hidden", padding: "118px 32px", borderTop: "1px solid var(--border)", background: "var(--bg-2)" }}>

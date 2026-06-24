@@ -17,6 +17,14 @@ const RATE_WINDOW_MS = 60 * 60 * 1000;
 const MIN_BALANCE_USDC = 0.05;
 const ipHits = new Map<string, number[]>();
 
+// --- Live stats (in-memory — resets on deploy, which is fine for a hackathon) ---
+const stats = {
+  errands: 0,
+  uniqueIps: new Set<string>(),
+  settledUsdc: 0,
+  tippedUsdc: 0,
+};
+
 function checkRate(ip: string): boolean {
   const now = Date.now();
   const hits = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
@@ -28,6 +36,15 @@ function checkRate(ip: string): boolean {
 
 app.get("/health", (_req, res) =>
   res.json({ ok: true, service: "orchestrator", agent: config.agentAddress, renderService: config.renderServiceUrl }),
+);
+
+app.get("/stats", (_req, res) =>
+  res.json({
+    errands: stats.errands,
+    users: stats.uniqueIps.size,
+    settledUsdc: Number(stats.settledUsdc.toFixed(6)),
+    tippedUsdc: Number(stats.tippedUsdc.toFixed(6)),
+  }),
 );
 
 // Current spendable balance inside the agent's Gateway wallet.
@@ -67,12 +84,19 @@ app.post("/task", async (req, res) => {
     budgetUsdc: Number.isFinite(budgetUsdc) && budgetUsdc > 0 ? budgetUsdc : 0.02,
   };
 
+  stats.errands++;
+  stats.uniqueIps.add(ip);
+
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
-  const send = (e: TaskEvent) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+  const send = (e: TaskEvent) => {
+    if (e.type === "paid") stats.settledUsdc += e.paidUsdc;
+    if (e.type === "tipped") stats.tippedUsdc += e.tipUsdc;
+    res.write(`data: ${JSON.stringify(e)}\n\n`);
+  };
 
   try {
     await runTask(input, send);
