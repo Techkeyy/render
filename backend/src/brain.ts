@@ -16,7 +16,9 @@ import { config } from "./config.ts";
  * zod validating the shape of every response.
  */
 
-const client = new OpenAI({ apiKey: config.llmApiKey, baseURL: config.llmBaseUrl });
+const client = new OpenAI({ apiKey: config.llmApiKey, baseURL: config.llmBaseUrl, timeout: 45_000 });
+
+const MAX_PAGE_TEXT = 8000;
 
 // --- schemas (zod validates the model's JSON; z.infer gives the TS types) ---
 const PlanSchema = z.object({
@@ -126,7 +128,7 @@ export async function assess(opts: {
       `(${canAffordMore ? "enough for more pages" : "cannot afford another page"}).\n\n` +
       `Findings so far:\n${opts.findingsSoFar.length ? opts.findingsSoFar.map((f) => `- ${f}`).join("\n") : "(none yet)"}\n\n` +
       `Page just opened: ${opts.url}\nTitle: ${opts.pageTitle}\n\n` +
-      `Page text:\n${opts.pageText}`,
+      `Page text (truncated to ${MAX_PAGE_TEXT} chars):\n${opts.pageText.slice(0, MAX_PAGE_TEXT)}`,
   });
 }
 
