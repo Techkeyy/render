@@ -1,5 +1,6 @@
 import { config } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
+import { findPublisher } from "./publishers.ts";
 import * as brain from "./brain.ts";
 
 export interface ReceiptRow {
@@ -14,6 +15,7 @@ export type TaskEvent =
   | { type: "open"; url: string }
   | { type: "paid"; url: string; title: string; paidUsdc: number; settlementId?: string; spentUsdc: number }
   | { type: "finding"; url: string; finding: string; relevant: boolean }
+  | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
   | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl: string }
@@ -55,11 +57,13 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
     const visited = new Set<string>();
 
     while (queue.length > 0) {
-      if (spent + price > budget) {
+      const url = queue[0]!;
+      const pageCost = price + (findPublisher(url) ? config.tipPriceUsdc : 0);
+      if (spent + pageCost > budget) {
         emit({ type: "stop", reason: "budget reached — staying within the cap" });
         break;
       }
-      const url = queue.shift()!;
+      queue.shift();;
       if (visited.has(url)) continue;
       visited.add(url);
 
@@ -77,6 +81,18 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
       const title = paid.data?.title ?? "";
       receipt.push({ url, title, paidUsdc: paid.paidUsdc, settlementId: paid.settlementId });
       emit({ type: "paid", url, title, paidUsdc: paid.paidUsdc, settlementId: paid.settlementId, spentUsdc: spent });
+
+      const pub = findPublisher(url);
+      if (pub) {
+        try {
+          const tip = await wallet.tipPublisher(pub.id);
+          spent += tip.tipUsdc;
+          receipt.push({ url, title: `tip → ${tip.publisher}`, paidUsdc: tip.tipUsdc, settlementId: tip.settlementId });
+          emit({ type: "tipped", url, publisher: tip.publisher, publisherWallet: tip.publisherWallet, tipUsdc: tip.tipUsdc, settlementId: tip.settlementId });
+        } catch (e) {
+          console.warn(`publisher tip failed for ${pub.name}: ${(e as Error).message}`);
+        }
+      }
 
       const a = await brain.assess({
         goal: input.goal,

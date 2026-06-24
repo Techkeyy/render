@@ -31,6 +31,9 @@ export const config = {
   // What the render service charges per page it opens. Sub-cent — below any card floor.
   renderPrice: process.env.RENDER_PRICE ?? "$0.001",
   renderPriceUsdc: Number(process.env.RENDER_PRICE_USDC ?? "0.001"),
+  // Tip sent to the content publisher when a page from a registered domain is read.
+  tipPrice: process.env.TIP_PRICE ?? "$0.001",
+  tipPriceUsdc: Number(process.env.TIP_PRICE_USDC ?? "0.001"),
 
   // --- Service endpoints ---
   renderServicePort: Number(process.env.RENDER_SERVICE_PORT ?? 4000),

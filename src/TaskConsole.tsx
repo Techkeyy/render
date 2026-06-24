@@ -16,6 +16,7 @@ type TaskEvent =
   | { type: "open"; url: string }
   | { type: "paid"; url: string; title: string; paidUsdc: number; settlementId?: string; spentUsdc: number }
   | { type: "finding"; url: string; finding: string; relevant: boolean }
+  | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
   | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl?: string }
@@ -353,6 +354,21 @@ function EventRow({ e }: { e: TaskEvent }) {
         <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>paid ${e.paidUsdc.toFixed(3)}</span>
         {shortRef(e.settlementId) && (
           <span className="num" style={{ fontSize: 11, color: "var(--accent)" }} title={`Circle Gateway settlement ${e.settlementId}`}>
+            {shortRef(e.settlementId)}
+          </span>
+        )}
+      </Row>
+    );
+  if (e.type === "tipped")
+    return (
+      <Row>
+        <span style={{ fontSize: 11, color: "var(--accent)" }}>tip</span>
+        <span className="num" style={{ fontSize: 12.5, color: "var(--text-2)", flex: 1 }}>
+          → {e.publisher}
+        </span>
+        <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>${e.tipUsdc.toFixed(3)}</span>
+        {shortRef(e.settlementId) && (
+          <span className="num" style={{ fontSize: 11, color: "var(--accent)" }} title={`Publisher tip settlement ${e.settlementId}`}>
             {shortRef(e.settlementId)}
           </span>
         )}

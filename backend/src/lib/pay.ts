@@ -45,6 +45,17 @@ export class AgentWallet {
       data,
     };
   }
+  async tipPublisher(publisherId: string): Promise<{ tipUsdc: number; settlementId?: string; publisher: string; publisherWallet: string }> {
+    const target = `${config.renderServiceUrl}/tip?publisher=${encodeURIComponent(publisherId)}`;
+    const result = await this.gateway.pay(target, { method: "GET" });
+    const data = result.data as { publisher: string; publisherWallet: string; tipUsdc: string; settlementId: string | null };
+    return {
+      tipUsdc: Number(data?.tipUsdc ?? config.tipPriceUsdc),
+      settlementId: data?.settlementId ?? undefined,
+      publisher: data?.publisher ?? publisherId,
+      publisherWallet: data?.publisherWallet ?? "",
+    };
+  }
 }
 
 export interface RenderPayload {

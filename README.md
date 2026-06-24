@@ -10,6 +10,14 @@ cap and not a cent more.
 
 Built for the **Lepton Agents Hackathon** (Canteen × Circle × Arc).
 
+## Live demo
+
+- **App:** <https://render-kmjq.vercel.app/>
+- **Backend:** <https://render-agent-neup.onrender.com> (free tier — ~50s cold start)
+- **Agent wallet:** [`0x5E64243D492183958595C64Be9609642BDF4cF11`](https://testnet.arcscan.app/address/0x5E64243D492183958595C64Be9609642BDF4cF11)
+
+No wallet needed. No sign-up. The agent pays from its own USDC on Arc Testnet.
+
 ---
 
 ## The idea in one line
@@ -18,7 +26,7 @@ Most AI assistants hit a modern website and see a blank wall — the page never
 finishes loading for them. render opens each page in a real browser, and because
 that costs real compute, it **pays for each one** — `$0.001` in USDC, settled
 on **Arc** via **x402 + Circle Gateway**. Sub-cent, per-action, no subscription,
-no card on file. Every fare is a verifiable on-chain settlement.
+no card on file.
 
 ```
   you ──(goal + budget)──►  orchestrator  (plan → assess → synthesize)
@@ -48,9 +56,12 @@ fixed list.
 **Stack:** Arc Testnet (`eip155:5042002`) · Circle Gateway / x402-batching ·
 USDC (`0x3600…0000`) · Playwright · DeepSeek · viem · Express · React + Vite.
 
+**Deploy:** Frontend on Vercel, backend on Render.com (single-process Docker
+container — seller + orchestrator in one Node process to fit 512 MB free tier).
+
 ---
 
-## Run it
+## Run it locally
 
 ### Backend
 
@@ -75,9 +86,9 @@ Run an errand from the terminal (streams the receipt as it pays):
 ```bash
 curl -N -X POST http://localhost:4100/task \
   -H 'content-type: application/json' \
-  -d '{"goal":"Which of these has the lowest price?",
-       "seedUrls":["https://example.com/a","https://example.com/b"],
-       "budgetUsdc":0.02}'
+  -d '{"goal":"Which laptop is cheapest?",
+       "seedUrls":["https://webscraper.io/test-sites/e-commerce/ajax/computers/laptops"],
+       "budgetUsdc":0.01}'
 ```
 
 ### Frontend
@@ -89,31 +100,20 @@ npm run dev                       # http://localhost:5173
 
 ---
 
-## Status & MVP scope
-
-**Done**
+## Status
 
 - [x] `render-service` — x402-paywalled Playwright renderer, SSRF-guarded.
 - [x] `AgentWallet` — Circle Gateway deposit + pay-per-render.
 - [x] Agent brain — DeepSeek `plan` / `assess` / `synthesize`, JSON-validated.
 - [x] `orchestrator` — budget-bounded task loop, SSE live receipt.
-- [x] **End-to-end on real money** — real Arc settlements, answer returned, budget respected.
-- [x] Landing page — editorial light theme.
-
-**MVP (in progress)**
-
-- [ ] **Live task console** — type a goal + budget in the browser, watch the
-      agent plan, open pages, pay each fare, and return the answer + receipt,
-      streamed live. *(the centerpiece demo)*
-- [x] Receipt shows each fare's Circle Gateway settlement ref + a live link to
-      the agent's on-chain wallet on Arc (fares batch on-chain, so the wallet —
-      its USDC + its Gateway deposit — is the verifiable anchor, not a per-fare tx).
-- [ ] Visitor gets a small starting balance — try it without signing up.
-
-**After MVP**
-
-- [ ] Deploy (frontend + backend) and record the demo.
-- [ ] Submit by the hackathon deadline.
+- [x] End-to-end on real money — real Arc settlements, answer returned, budget respected.
+- [x] Landing page — editorial light theme, live agent balance in nav.
+- [x] Live task console — type a goal + budget, watch the agent plan, pay, and answer live.
+- [x] Zero-friction visitor experience — the agent pays from its own wallet, no sign-up needed.
+- [x] Receipt — Circle Gateway settlement ref per fare + on-chain wallet link.
+- [x] Rate limiting — per-IP cap + wallet floor guard.
+- [x] Deployed — frontend (Vercel) + backend (Render.com).
+- [ ] Record demo video and submit.
 
 ---
 
@@ -122,5 +122,3 @@ npm run dev                       # http://localhost:5173
 - `render-service` — `GET /health`, `GET /render?url=` (paywalled `$0.001`)
 - `orchestrator` — `GET /health`, `GET /balance`, `POST /task` (SSE stream of
   `plan → open → paid → finding → stop → answer`)
-</content>
-</invoke>
