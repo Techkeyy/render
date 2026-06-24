@@ -23,20 +23,19 @@ type TaskEvent =
 
 const EXAMPLES: { label: string; goal: string; seeds: string[]; budget: number }[] = [
   {
-    label: "Cheapest of these books",
-    goal: "Which of these books is the cheapest, and what is its exact price?",
-    seeds: [
-      "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
-      "https://books.toscrape.com/catalogue/tipping-the-velvet_999/index.html",
-      "https://books.toscrape.com/catalogue/soumission_998/index.html",
-    ],
-    budget: 0.02,
+    label: "Cheapest laptop",
+    goal: "Which laptop on this page is the cheapest, and what is its exact price?",
+    seeds: ["https://webscraper.io/test-sites/e-commerce/ajax/computers/laptops"],
+    budget: 0.01,
   },
   {
-    label: "Is this one in stock?",
-    goal: "Is this book in stock, and how many are available?",
-    seeds: ["https://books.toscrape.com/catalogue/sharp-objects_997/index.html"],
-    budget: 0.01,
+    label: "Compare two phones",
+    goal: "Compare the prices of phones on these two pages — which page has the better deal?",
+    seeds: [
+      "https://webscraper.io/test-sites/e-commerce/ajax/computers/phones",
+      "https://webscraper.io/test-sites/e-commerce/ajax/computers/tablets",
+    ],
+    budget: 0.02,
   },
 ];
 

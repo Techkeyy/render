@@ -40,10 +40,9 @@ function AgentBalance() {
 
 // --- illustrative receipt rows (a sample task, clearly labelled — not live data) ---
 const sampleRows = [
-  { site: "bestbuy.com", paid: "0.001", note: "$129.99" },
-  { site: "amazon.com", paid: "0.001", note: "$118.49" },
-  { site: "newegg.com", paid: "0.001", note: "$124.00" },
-  { site: "microcenter.com", paid: "0.001", note: "$109.99", best: true },
+  { site: "webscraper.io/…/laptops", paid: "0.001", note: "Lenovo $321.94" },
+  { site: "webscraper.io/…/phones", paid: "0.001", note: "Nokia $109.99" },
+  { site: "webscraper.io/…/tablets", paid: "0.001", note: "Lenovo $69.99", best: true },
 ];
 
 function ReceiptCard() {
@@ -54,7 +53,7 @@ function ReceiptCard() {
         <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>budget · $0.02</span>
       </div>
       <div style={{ fontFamily: "var(--font-body)", color: "var(--text-1)", fontSize: 15, marginBottom: 18 }}>
-        “Find the cheapest 1TB SSD across these stores.”
+        “Which of these devices is the cheapest?”
       </div>
       <div style={{ display: "grid", gap: 11 }}>
         {sampleRows.map((r) => (
@@ -70,8 +69,8 @@ function ReceiptCard() {
         ))}
       </div>
       <div style={{ borderTop: "1px solid var(--border)", marginTop: 18, paddingTop: 14, display: "flex", justifyContent: "space-between" }}>
-        <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>checked 4 sites · spent $0.004</span>
-        <span className="num" style={{ fontSize: 12, color: "var(--text-2)" }}>$0.016 returned</span>
+        <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>checked 3 pages · spent $0.003</span>
+        <span className="num" style={{ fontSize: 12, color: "var(--text-2)" }}>$0.017 returned</span>
       </div>
     </div>
   );
