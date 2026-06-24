@@ -8,7 +8,6 @@ import { useRef, useState } from "react";
  */
 
 const ORCH = (import.meta.env.VITE_ORCHESTRATOR_URL as string | undefined) ?? "http://localhost:4100";
-const EXPLORER = (import.meta.env.VITE_ARC_EXPLORER as string | undefined) ?? "https://testnet.arcscan.app";
 
 // --- event shapes, mirroring backend/src/runner.ts ---
 type ReceiptRow = { url: string; title: string; paidUsdc: number; settlementId?: string };
@@ -19,7 +18,7 @@ type TaskEvent =
   | { type: "finding"; url: string; finding: string; relevant: boolean }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
-  | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[] }
+  | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl?: string }
   | { type: "error"; error: string };
 
 const EXAMPLES: { label: string; goal: string; seeds: string[]; budget: number }[] = [
@@ -51,8 +50,10 @@ function host(u: string): string {
   }
 }
 
-function isTxHash(id?: string): id is string {
-  return !!id && /^0x[0-9a-fA-F]{64}$/.test(id);
+/** Shorten a Circle settlement reference for display (e.g. 149f55c5…796c8). */
+function shortRef(id?: string): string | null {
+  if (!id) return null;
+  return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-5)}` : id;
 }
 
 /** Parse the orchestrator's POST + SSE stream (EventSource is GET-only, so we read the body ourselves). */
@@ -307,21 +308,30 @@ export default function TaskConsole() {
                   {host(r.url)}
                 </span>
                 <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>${r.paidUsdc.toFixed(3)}</span>
-                {isTxHash(r.settlementId) ? (
-                  <a className="num tc-link" href={`${EXPLORER}/tx/${r.settlementId}`} target="_blank" rel="noreferrer">
-                    receipt ↗
-                  </a>
+                {shortRef(r.settlementId) ? (
+                  <span className="num" style={{ fontSize: 11, color: "var(--accent)" }} title={`Circle Gateway settlement ${r.settlementId}`}>
+                    {shortRef(r.settlementId)}
+                  </span>
                 ) : (
                   <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>settled</span>
                 )}
               </div>
             ))}
           </div>
-          <div style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 14, display: "flex", justifyContent: "space-between" }}>
+          <div style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
-              {answer.receipt.length} page{answer.receipt.length === 1 ? "" : "s"} · spent ${answer.spentUsdc.toFixed(3)}
+              {answer.receipt.length} page{answer.receipt.length === 1 ? "" : "s"} · spent ${answer.spentUsdc.toFixed(3)} · ${answer.returnedUsdc.toFixed(3)} returned
             </span>
-            <span className="num" style={{ fontSize: 12, color: "var(--text-2)" }}>${answer.returnedUsdc.toFixed(3)} returned</span>
+            {answer.verifyUrl && (
+              <a className="num tc-link" href={answer.verifyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                Verify on Arc ↗
+              </a>
+            )}
+          </div>
+          <div className="num" style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 10, lineHeight: 1.5 }}>
+            Each fare is a Circle Gateway settlement on Arc, paid from the agent's own USDC.
+            Fares batch on-chain — “Verify on Arc” opens the agent wallet, where its USDC and
+            its deposit into Circle's Gateway contract are public transactions.
           </div>
         </div>
       )}
@@ -342,10 +352,10 @@ function EventRow({ e }: { e: TaskEvent }) {
         <span className="coin" />
         <span className="num tc-url" style={{ flex: 1 }}>{host(e.url)}</span>
         <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>paid ${e.paidUsdc.toFixed(3)}</span>
-        {isTxHash(e.settlementId) && (
-          <a className="num tc-link" href={`${EXPLORER}/tx/${e.settlementId}`} target="_blank" rel="noreferrer">
-            ↗
-          </a>
+        {shortRef(e.settlementId) && (
+          <span className="num" style={{ fontSize: 11, color: "var(--accent)" }} title={`Circle Gateway settlement ${e.settlementId}`}>
+            {shortRef(e.settlementId)}
+          </span>
         )}
       </Row>
     );

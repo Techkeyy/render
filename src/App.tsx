@@ -218,8 +218,8 @@ export default function App() {
             Give it a job. Watch it pay its way.
           </h2>
           <p style={{ fontSize: 17, color: "var(--text-2)", maxWidth: 620, margin: "0 auto" }}>
-            Set a goal and a budget it can't cross. Every fare below is a real settlement on Arc —
-            you can click through to each one.
+            Set a goal and a budget it can't cross. Every fare below is a real USDC settlement on Arc,
+            paid through Circle Gateway from the agent's own on-chain wallet — which you can inspect.
           </p>
         </div>
         <TaskConsole />

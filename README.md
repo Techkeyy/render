@@ -105,7 +105,9 @@ npm run dev                       # http://localhost:5173
 - [ ] **Live task console** — type a goal + budget in the browser, watch the
       agent plan, open pages, pay each fare, and return the answer + receipt,
       streamed live. *(the centerpiece demo)*
-- [ ] Receipt rows link each fare to its Arc settlement on the explorer.
+- [x] Receipt shows each fare's Circle Gateway settlement ref + a live link to
+      the agent's on-chain wallet on Arc (fares batch on-chain, so the wallet —
+      its USDC + its Gateway deposit — is the verifiable anchor, not a per-fare tx).
 - [ ] Visitor gets a small starting balance — try it without signing up.
 
 **After MVP**

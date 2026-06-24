@@ -16,7 +16,7 @@ export type TaskEvent =
   | { type: "finding"; url: string; finding: string; relevant: boolean }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
-  | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[] }
+  | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl: string }
   | { type: "error"; error: string };
 
 export interface TaskInput {
@@ -109,6 +109,10 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
       spentUsdc: Number(spent.toFixed(6)),
       returnedUsdc: Number((budget - spent).toFixed(6)),
       receipt,
+      // Each fare is a Circle Gateway settlement (batched — no per-fare on-chain
+      // tx hash). The agent's wallet is the on-chain anchor: its USDC and its
+      // deposit into the Gateway contract are real, public Arc transactions.
+      verifyUrl: `${config.arcExplorer}/address/${config.agentAddress}`,
     });
   } catch (e) {
     emit({ type: "error", error: (e as Error).message });
