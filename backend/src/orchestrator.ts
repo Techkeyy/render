@@ -4,17 +4,27 @@ import { config, requireWallets } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
 import { runTask, type TaskEvent, type TaskInput } from "./runner.ts";
 
-/**
- * The HTTP API the frontend talks to. One endpoint runs an errand and streams
- * the live receipt back as Server-Sent Events, so the browser can render each
- * fare as it's paid.
- */
-
 requireWallets();
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
+
+// --- Rate limiting (in-memory, per-IP) ---
+const RATE_LIMIT = 3;
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const MIN_BALANCE_USDC = 0.05;
+const ipHits = new Map<string, number[]>();
+
+function checkRate(ip: string): boolean {
+  const now = Date.now();
+  const hits = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (hits.length >= RATE_LIMIT) return false;
+  hits.push(now);
+  ipHits.set(ip, hits);
+  return true;
+}
 
 app.get("/health", (_req, res) =>
   res.json({ ok: true, service: "orchestrator", agent: config.agentAddress, renderService: config.renderServiceUrl }),
@@ -34,8 +44,19 @@ app.get("/balance", async (_req, res) => {
   }
 });
 
-// Run an errand. Streams TaskEvents as SSE; the final "answer" event carries the receipt.
 app.post("/task", async (req, res) => {
+  const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+  if (!checkRate(ip)) {
+    return res.status(429).json({ error: "Rate limit — max 3 tasks per hour. Try again later." });
+  }
+  try {
+    const wallet = new AgentWallet(config.agentPrivateKey);
+    const avail = await wallet.available();
+    if (avail < MIN_BALANCE_USDC) {
+      return res.status(503).json({ error: "The agent's wallet is running low. Please try again later." });
+    }
+  } catch { /* if balance check fails, let the task attempt anyway */ }
+
   const { goal, seedUrls, budgetUsdc } = req.body ?? {};
   if (typeof goal !== "string" || !goal.trim()) {
     return res.status(400).json({ error: "goal (string) is required" });

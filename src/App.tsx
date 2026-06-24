@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import TaskConsole from "./TaskConsole.tsx";
+
+const ORCH = (import.meta.env.VITE_ORCHESTRATOR_URL as string | undefined) ?? "http://localhost:4100";
 
 const scrollTo = (id: string) => () =>
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -7,6 +10,32 @@ const maxw = 1100;
 
 function Coin() {
   return <span className="coin" aria-hidden />;
+}
+
+function AgentBalance() {
+  const [usdc, setUsdc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetch(`${ORCH}/balance`)
+        .then((r) => r.json())
+        .then((d) => { if (live) setUsdc(d.gatewayAvailableUsdc ?? null); })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { live = false; clearInterval(id); };
+  }, []);
+
+  if (!usdc) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <Coin />
+      <span className="num" style={{ fontSize: 12.5, color: "var(--text-2)" }}>
+        <span style={{ color: "var(--accent)" }}>{usdc}</span> USDC
+      </span>
+    </div>
+  );
 }
 
 // --- illustrative receipt rows (a sample task, clearly labelled — not live data) ---
@@ -100,7 +129,7 @@ export default function App() {
           <button className="navlink hide-sm" onClick={scrollTo("how")}>How it works</button>
           <button className="navlink hide-sm" onClick={scrollTo("why")}>Why it's different</button>
           <button className="navlink hide-sm" onClick={scrollTo("uses")}>Use it for</button>
-          <button className="btn btn-primary" onClick={scrollTo("try")}>Try a task</button>
+          <AgentBalance />
         </div>
       </nav>
 
@@ -113,7 +142,7 @@ export default function App() {
           style={{
             position: "absolute", top: 0, right: 0, bottom: 0, width: "50%",
             backgroundImage: "url('/robot.jpg')", backgroundSize: "cover", backgroundPosition: "center right",
-            opacity: 0.13, filter: "grayscale(0.4) sepia(0.5) contrast(1.04)",
+            opacity: 0.32, filter: "grayscale(0.2) sepia(0.25) contrast(1.06)",
             WebkitMaskImage: "radial-gradient(125% 92% at 88% 46%, #000 30%, transparent 78%)",
             maskImage: "radial-gradient(125% 92% at 88% 46%, #000 30%, transparent 78%)",
             pointerEvents: "none", zIndex: 0,
@@ -149,7 +178,7 @@ export default function App() {
           style={{
             position: "absolute", top: 0, right: 0, bottom: 0, width: "52%",
             backgroundImage: "url('/handshake.jpg')", backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "right 18%",
-            mixBlendMode: "multiply", opacity: 0.42, filter: "sepia(0.32) saturate(1.05) contrast(1.02)",
+            opacity: 0.55, filter: "sepia(0.15) saturate(1.1) contrast(1.05)",
             WebkitMaskImage: "radial-gradient(120% 100% at 92% 30%, #000 32%, transparent 80%)",
             maskImage: "radial-gradient(120% 100% at 92% 30%, #000 32%, transparent 80%)",
             pointerEvents: "none", zIndex: 0,
