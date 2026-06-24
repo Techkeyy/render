@@ -31,6 +31,9 @@ export type Plan = z.infer<typeof PlanSchema>;
 const AssessSchema = z.object({
   finding: z.string(),
   relevant: z.boolean(),
+  information_gain: z.number().min(0).max(1),
+  confidence_so_far: z.number().min(0).max(1),
+  expected_value_of_next: z.number().min(0).max(1),
   enough_to_answer: z.boolean(),
   worth_continuing: z.boolean(),
   reason: z.string(),
@@ -116,11 +119,21 @@ export async function assess(opts: {
     schema: AssessSchema,
     system:
       "You read one web page for an errand agent and extract only what matters for the goal. " +
-      "Then you make a spending decision: each extra page costs a fare, so say whether opening " +
-      "another is worth it given what is already known and the budget left.\n" +
-      'Respond ONLY with a JSON object of exactly this shape: ' +
-      '{"finding": string, "relevant": boolean, "enough_to_answer": boolean, "worth_continuing": boolean, "reason": string}. ' +
-      "finding is what this page contributed (or 'nothing relevant'); reason is one sentence on the spend decision.",
+      "Then you make a spending decision. Each extra page costs a fare (real money), so you must " +
+      "estimate whether the INFORMATION GAIN from the next page justifies the cost.\n\n" +
+      "Respond ONLY with a JSON object:\n" +
+      "{\n" +
+      '  "finding": string,              // what this page contributed (or "nothing relevant")\n' +
+      '  "relevant": boolean,            // did this page help?\n' +
+      '  "information_gain": number 0-1, // how much new info THIS page added (0=nothing, 1=complete answer)\n' +
+      '  "confidence_so_far": number 0-1,// how confident you are the goal can be answered with what you have\n' +
+      '  "expected_value_of_next": number 0-1, // estimated info gain from opening one more page\n' +
+      '  "enough_to_answer": boolean,    // can you answer the goal NOW without more pages?\n' +
+      '  "worth_continuing": boolean,    // is expected_value_of_next high enough to justify the fare?\n' +
+      '  "reason": string                // one sentence: the cost-benefit logic behind your decision\n' +
+      "}\n\n" +
+      "The worth_continuing decision should weigh expected_value_of_next against the fare cost " +
+      "relative to remaining budget. If confidence_so_far > 0.8, lean toward stopping.",
     user:
       `Goal: ${opts.goal}\n` +
       `What to extract: ${opts.extractionGoal}\n` +

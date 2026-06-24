@@ -15,7 +15,7 @@ type TaskEvent =
   | { type: "plan"; reasoning: string; extractionGoal: string; urls: { url: string; why: string }[] }
   | { type: "open"; url: string }
   | { type: "paid"; url: string; title: string; paidUsdc: number; settlementId?: string; spentUsdc: number }
-  | { type: "finding"; url: string; finding: string; relevant: boolean }
+  | { type: "finding"; url: string; finding: string; relevant: boolean; infoGain?: number; confidence?: number }
   | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
@@ -378,7 +378,12 @@ function EventRow({ e }: { e: TaskEvent }) {
     return (
       <Row tone={e.relevant ? "default" : "muted"}>
         <span style={{ color: e.relevant ? "var(--accent)" : "var(--text-3)" }}>{e.relevant ? "found" : "—"}</span>{" "}
-        <span style={{ fontFamily: "var(--font-body)", fontSize: 14 }}>{e.finding}</span>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: 14, flex: 1 }}>{e.finding}</span>
+        {e.confidence != null && (
+          <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }} title={`info gain: ${((e.infoGain ?? 0) * 100).toFixed(0)}% · confidence: ${(e.confidence * 100).toFixed(0)}%`}>
+            {(e.confidence * 100).toFixed(0)}% sure
+          </span>
+        )}
       </Row>
     );
   if (e.type === "render_error")

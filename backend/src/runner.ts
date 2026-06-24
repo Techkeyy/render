@@ -14,7 +14,7 @@ export type TaskEvent =
   | { type: "plan"; reasoning: string; extractionGoal: string; urls: { url: string; why: string }[] }
   | { type: "open"; url: string }
   | { type: "paid"; url: string; title: string; paidUsdc: number; settlementId?: string; spentUsdc: number }
-  | { type: "finding"; url: string; finding: string; relevant: boolean }
+  | { type: "finding"; url: string; finding: string; relevant: boolean; infoGain: number; confidence: number }
   | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
@@ -105,7 +105,7 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
         pricePerPage: price,
       });
       if (a.relevant) findings.push(`[${url}] ${a.finding}`);
-      emit({ type: "finding", url, finding: a.finding, relevant: a.relevant });
+      emit({ type: "finding", url, finding: a.finding, relevant: a.relevant, infoGain: a.information_gain, confidence: a.confidence_so_far });
 
       if (a.enough_to_answer) {
         emit({ type: "stop", reason: "enough to answer — stopping" });
