@@ -43,6 +43,8 @@ export type Assessment = z.infer<typeof AssessSchema>;
 const AnswerSchema = z.object({
   answer: z.string(),
   confidence: z.enum(["high", "medium", "low"]),
+  sources: z.array(z.object({ url: z.string(), claim: z.string() })),
+  data: z.record(z.unknown()).nullable(),
 });
 export type Answer = z.infer<typeof AnswerSchema>;
 
@@ -145,16 +147,31 @@ export async function assess(opts: {
   });
 }
 
-export async function synthesize(opts: { goal: string; findings: string[] }): Promise<Answer> {
+export async function synthesize(opts: {
+  goal: string;
+  findings: string[];
+  outputFields?: string[];
+}): Promise<Answer> {
+  const structuredInstr = opts.outputFields?.length
+    ? `\nThe user requested structured output. In addition to the prose answer, fill the "data" ` +
+      `object with these fields extracted from the findings: ${JSON.stringify(opts.outputFields)}. ` +
+      `Use appropriate types (numbers for prices, booleans for yes/no, strings otherwise).`
+    : `\nSet "data" to null (no structured output was requested).`;
+
   return jsonCall({
     model: config.modelPlan,
-    maxTokens: 1200,
+    maxTokens: 1500,
     schema: AnswerSchema,
     system:
       "You answer the user's goal using only the findings the agent gathered from the pages it opened. " +
-      "Be direct and concrete. If the findings are thin, say so and lower the confidence.\n" +
-      'Respond ONLY with a JSON object of exactly this shape: ' +
-      '{"answer": string, "confidence": "high" | "medium" | "low"}.',
+      "Be direct and concrete. If the findings are thin, say so and lower the confidence.\n\n" +
+      "IMPORTANT: For every factual claim in your answer, cite the source URL in the sources array. " +
+      "Each source entry has {url, claim} — the URL that grounded the claim and a short description " +
+      "of what it contributed.\n" +
+      structuredInstr + "\n\n" +
+      "Respond ONLY with JSON: " +
+      '{"answer": string, "confidence": "high"|"medium"|"low", ' +
+      '"sources": [{url: string, claim: string}], "data": object|null}.',
     user:
       `Goal: ${opts.goal}\n\nFindings gathered:\n` +
       (opts.findings.length ? opts.findings.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(no useful findings)"),

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The live task console — the interactive heart of the demo.
@@ -19,7 +19,7 @@ type TaskEvent =
   | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
-  | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl?: string }
+  | { type: "answer"; answer: string; confidence: string; sources?: { url: string; claim: string }[]; data?: Record<string, unknown> | null; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl?: string }
   | { type: "error"; error: string };
 
 const EXAMPLES: { label: string; goal: string; seeds: string[]; budget: number }[] = [
@@ -41,6 +41,19 @@ const EXAMPLES: { label: string; goal: string; seeds: string[]; budget: number }
 ];
 
 const BUDGETS = [0.01, 0.02, 0.05];
+const WATCH_INTERVALS = [15, 30, 60];
+
+interface WatchInfo {
+  id: string;
+  goal: string;
+  status: string;
+  changed: boolean;
+  currentAnswer: string | null;
+  runs: number;
+  totalSpentUsdc: number;
+  intervalMin: number;
+  nextRunAt: number | null;
+}
 
 function host(u: string): string {
   try {
@@ -124,6 +137,21 @@ export default function TaskConsole() {
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [watchMode, setWatchMode] = useState(false);
+  const [watchInterval, setWatchInterval] = useState(30);
+  const [activeWatches, setActiveWatches] = useState<WatchInfo[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetch(`${ORCH}/watches`)
+        .then((r) => r.json())
+        .then((d) => { if (live && Array.isArray(d)) setActiveWatches(d); })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 15_000);
+    return () => { live = false; clearInterval(id); };
+  }, []);
 
   const plan = events.find((e) => e.type === "plan") as Extract<TaskEvent, { type: "plan" }> | undefined;
   const answer = events.find((e) => e.type === "answer") as Extract<TaskEvent, { type: "answer" }> | undefined;
@@ -145,13 +173,41 @@ export default function TaskConsole() {
     if (!goal.trim() || running) return;
     setEvents([]);
     setError(null);
-    setRunning(true);
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
     const seedUrls = seeds
       .split(/[\n,\s]+/)
       .map((s) => s.trim())
       .filter(Boolean);
+
+    if (watchMode) {
+      setRunning(true);
+      fetch(`${ORCH}/watch`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ goal: goal.trim(), seedUrls, budgetUsdc: budget, intervalMin: watchInterval }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.error) setError(d.error);
+          else {
+            setEvents([{
+              type: "answer",
+              answer: d.currentAnswer ?? "Watch started — first result incoming.",
+              confidence: "medium",
+              spentUsdc: 0,
+              returnedUsdc: budget,
+              receipt: [],
+            }]);
+            fetch(`${ORCH}/watches`).then(r => r.json()).then(w => { if (Array.isArray(w)) setActiveWatches(w); }).catch(() => {});
+          }
+        })
+        .catch((e) => setError((e as Error).message))
+        .finally(() => setRunning(false));
+      return;
+    }
+
+    setRunning(true);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     streamTask(
       { goal: goal.trim(), seedUrls, budgetUsdc: budget },
       {
@@ -222,6 +278,39 @@ export default function TaskConsole() {
               ))}
             </div>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={() => setWatchMode(!watchMode)}
+              className="num"
+              style={{
+                cursor: "pointer", padding: "7px 13px", borderRadius: 999, fontSize: 12.5,
+                border: "1px solid " + (watchMode ? "var(--accent-border)" : "var(--border-strong)"),
+                background: watchMode ? "var(--accent-dim)" : "transparent",
+                color: watchMode ? "var(--accent)" : "var(--text-2)",
+              }}
+            >
+              {watchMode ? "⟳ Watch on" : "⟳ Watch"}
+            </button>
+            {watchMode && (
+              <div style={{ display: "flex", gap: 4 }}>
+                {WATCH_INTERVALS.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setWatchInterval(m)}
+                    className="num"
+                    style={{
+                      cursor: "pointer", padding: "5px 9px", borderRadius: 999, fontSize: 11,
+                      border: "1px solid " + (watchInterval === m ? "var(--accent-border)" : "var(--border)"),
+                      background: watchInterval === m ? "var(--accent-dim)" : "transparent",
+                      color: watchInterval === m ? "var(--accent)" : "var(--text-3)",
+                    }}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <span style={{ flex: 1 }} />
           {running ? (
             <button className="btn btn-ghost" onClick={stop}>
@@ -229,7 +318,7 @@ export default function TaskConsole() {
             </button>
           ) : (
             <button className="btn btn-primary" onClick={run} disabled={!goal.trim()} style={!goal.trim() ? { opacity: 0.5, cursor: "default" } : undefined}>
-              Run the errand
+              {watchMode ? "Start watching" : "Run the errand"}
             </button>
           )}
         </div>
@@ -300,6 +389,27 @@ export default function TaskConsole() {
           <p className="serif" style={{ margin: "0 0 22px", fontSize: 24, lineHeight: 1.3, color: "var(--text-1)" }}>
             {answer.answer}
           </p>
+          {answer.sources && answer.sources.length > 0 && (
+            <div style={{ marginBottom: 18, padding: "12px 14px", background: "var(--bg-2)", borderRadius: 8 }}>
+              <span className="eyebrow" style={{ fontSize: 10, marginBottom: 8, display: "block" }}>Sources</span>
+              {answer.sources.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 4 }}>
+                  <a className="num tc-link" href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, flexShrink: 0 }}>
+                    {host(s.url)}
+                  </a>
+                  <span style={{ fontSize: 13, color: "var(--text-2)" }}>{s.claim}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {answer.data && Object.keys(answer.data).length > 0 && (
+            <div style={{ marginBottom: 18, padding: "12px 14px", background: "var(--bg-2)", borderRadius: 8, fontFamily: "var(--font-num)" }}>
+              <span className="eyebrow" style={{ fontSize: 10, marginBottom: 8, display: "block" }}>Structured data</span>
+              <pre style={{ margin: 0, fontSize: 12.5, color: "var(--text-1)", whiteSpace: "pre-wrap" }}>
+                {JSON.stringify(answer.data, null, 2)}
+              </pre>
+            </div>
+          )}
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, display: "grid", gap: 9 }}>
             {answer.receipt.map((r, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -332,6 +442,42 @@ export default function TaskConsole() {
             Each fare is a Circle Gateway settlement on Arc, paid from the agent's own USDC.
             Fares batch on-chain — “Verify on Arc” opens the agent wallet, where its USDC and
             its deposit into Circle's Gateway contract are public transactions.
+          </div>
+        </div>
+      )}
+
+      {/* ---------- active watches ---------- */}
+      {activeWatches.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>Active watches</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {activeWatches.map((w) => (
+              <div key={w.id} className="card" style={{ padding: "16px 20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                  <span style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: "var(--text-1)" }}>
+                    "{w.goal.length > 60 ? w.goal.slice(0, 57) + "…" : w.goal}"
+                  </span>
+                  <span className="num" style={{ fontSize: 11, color: w.changed ? "var(--accent)" : "var(--text-3)" }}>
+                    {w.changed ? "changed!" : w.status}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>every {w.intervalMin}m</span>
+                  <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>{w.runs} run{w.runs === 1 ? "" : "s"}</span>
+                  <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>${w.totalSpentUsdc.toFixed(3)} spent</span>
+                  {w.nextRunAt && (
+                    <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
+                      next in {Math.max(0, Math.round((w.nextRunAt - Date.now()) / 60000))}m
+                    </span>
+                  )}
+                </div>
+                {w.currentAnswer && (
+                  <p style={{ margin: "10px 0 0", fontSize: 14, color: "var(--text-2)", lineHeight: 1.4 }}>
+                    {w.currentAnswer.length > 200 ? w.currentAnswer.slice(0, 197) + "…" : w.currentAnswer}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

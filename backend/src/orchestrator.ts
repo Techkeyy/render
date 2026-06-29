@@ -25,6 +25,61 @@ const stats = {
   tippedUsdc: 0,
 };
 
+// --- Watch mode (in-memory, max 5 active watches) ---
+interface Watch {
+  id: string;
+  input: TaskInput;
+  intervalMs: number;
+  createdAt: number;
+  lastRunAt: number | null;
+  lastAnswer: string | null;
+  currentAnswer: string | null;
+  changed: boolean;
+  runs: number;
+  totalSpentUsdc: number;
+  status: "active" | "done";
+  ip: string;
+  timer: ReturnType<typeof setInterval> | null;
+}
+const MAX_WATCHES = 5;
+const MAX_WATCH_LIFETIME_MS = 6 * 60 * 60 * 1000;
+const watches = new Map<string, Watch>();
+
+function watchId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+async function runWatchCycle(w: Watch) {
+  if (w.status !== "active") return;
+  if (Date.now() - w.createdAt > MAX_WATCH_LIFETIME_MS) {
+    w.status = "done";
+    if (w.timer) clearInterval(w.timer);
+    return;
+  }
+  try {
+    let answer = "";
+    let spent = 0;
+    await runTask(w.input, (e) => {
+      if (e.type === "paid") {
+        stats.settledUsdc += e.paidUsdc;
+        spent += e.paidUsdc;
+      }
+      if (e.type === "tipped") stats.tippedUsdc += e.tipUsdc;
+      if (e.type === "answer") answer = e.answer;
+    });
+    w.lastAnswer = w.currentAnswer;
+    w.currentAnswer = answer;
+    w.changed = w.lastAnswer !== null && w.currentAnswer !== w.lastAnswer;
+    w.runs++;
+    w.totalSpentUsdc += spent;
+    w.lastRunAt = Date.now();
+    stats.errands++;
+    stats.uniqueIps.add(w.ip);
+  } catch (e) {
+    console.warn(`watch ${w.id} cycle failed: ${(e as Error).message}`);
+  }
+}
+
 function checkRate(ip: string): boolean {
   const now = Date.now();
   const hits = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
@@ -74,7 +129,7 @@ app.post("/task", async (req, res) => {
     }
   } catch { /* if balance check fails, let the task attempt anyway */ }
 
-  const { goal, seedUrls, budgetUsdc } = req.body ?? {};
+  const { goal, seedUrls, budgetUsdc, outputFields } = req.body ?? {};
   if (typeof goal !== "string" || !goal.trim()) {
     return res.status(400).json({ error: "goal (string) is required" });
   }
@@ -82,6 +137,7 @@ app.post("/task", async (req, res) => {
     goal: goal.trim(),
     seedUrls: Array.isArray(seedUrls) ? seedUrls.filter((u: unknown) => typeof u === "string") : [],
     budgetUsdc: Number.isFinite(budgetUsdc) && budgetUsdc > 0 ? budgetUsdc : 0.02,
+    outputFields: Array.isArray(outputFields) ? outputFields.filter((f: unknown) => typeof f === "string") : undefined,
   };
 
   stats.errands++;
@@ -106,6 +162,100 @@ app.post("/task", async (req, res) => {
     res.write("event: end\ndata: {}\n\n");
     res.end();
   }
+});
+
+// --- Watch endpoints ---
+
+app.post("/watch", async (req, res) => {
+  const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+  if (watches.size >= MAX_WATCHES) {
+    return res.status(429).json({ error: `Max ${MAX_WATCHES} active watches. Cancel one first.` });
+  }
+  const { goal, seedUrls, budgetUsdc, intervalMin } = req.body ?? {};
+  if (typeof goal !== "string" || !goal.trim()) {
+    return res.status(400).json({ error: "goal (string) is required" });
+  }
+  const interval = [15, 30, 60].includes(Number(intervalMin)) ? Number(intervalMin) : 30;
+  const input: TaskInput = {
+    goal: goal.trim(),
+    seedUrls: Array.isArray(seedUrls) ? seedUrls.filter((u: unknown) => typeof u === "string") : [],
+    budgetUsdc: Number.isFinite(budgetUsdc) && budgetUsdc > 0 ? budgetUsdc : 0.02,
+  };
+
+  const id = watchId();
+  const w: Watch = {
+    id,
+    input,
+    intervalMs: interval * 60 * 1000,
+    createdAt: Date.now(),
+    lastRunAt: null,
+    lastAnswer: null,
+    currentAnswer: null,
+    changed: false,
+    runs: 0,
+    totalSpentUsdc: 0,
+    status: "active",
+    ip,
+    timer: null,
+  };
+  watches.set(id, w);
+
+  // First run immediately
+  await runWatchCycle(w);
+
+  // Schedule recurring runs
+  w.timer = setInterval(() => runWatchCycle(w), w.intervalMs);
+
+  res.json({
+    id: w.id,
+    status: w.status,
+    currentAnswer: w.currentAnswer,
+    runs: w.runs,
+    nextRunAt: Date.now() + w.intervalMs,
+  });
+});
+
+app.get("/watches", (_req, res) => {
+  const list = [...watches.values()].map((w) => ({
+    id: w.id,
+    goal: w.input.goal,
+    status: w.status,
+    changed: w.changed,
+    currentAnswer: w.currentAnswer,
+    runs: w.runs,
+    totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)),
+    intervalMin: w.intervalMs / 60000,
+    lastRunAt: w.lastRunAt,
+    nextRunAt: w.status === "active" ? (w.lastRunAt ?? w.createdAt) + w.intervalMs : null,
+  }));
+  res.json(list);
+});
+
+app.get("/watch/:id", (req, res) => {
+  const w = watches.get(req.params.id);
+  if (!w) return res.status(404).json({ error: "watch not found" });
+  res.json({
+    id: w.id,
+    goal: w.input.goal,
+    status: w.status,
+    changed: w.changed,
+    lastAnswer: w.lastAnswer,
+    currentAnswer: w.currentAnswer,
+    runs: w.runs,
+    totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)),
+    intervalMin: w.intervalMs / 60000,
+    lastRunAt: w.lastRunAt,
+    nextRunAt: w.status === "active" ? (w.lastRunAt ?? w.createdAt) + w.intervalMs : null,
+  });
+});
+
+app.delete("/watch/:id", (req, res) => {
+  const w = watches.get(req.params.id);
+  if (!w) return res.status(404).json({ error: "watch not found" });
+  if (w.timer) clearInterval(w.timer);
+  w.status = "done";
+  watches.delete(w.id);
+  res.json({ cancelled: true, id: w.id, runs: w.runs, totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)) });
 });
 
 // Make sure the Gateway wallet has spendable USDC before serving traffic.

@@ -18,13 +18,14 @@ export type TaskEvent =
   | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
-  | { type: "answer"; answer: string; confidence: string; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl: string }
+  | { type: "answer"; answer: string; confidence: string; sources: { url: string; claim: string }[]; data: Record<string, unknown> | null; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl: string }
   | { type: "error"; error: string };
 
 export interface TaskInput {
   goal: string;
   seedUrls?: string[];
   budgetUsdc: number;
+  outputFields?: string[];
 }
 
 /**
@@ -117,17 +118,20 @@ export async function runTask(input: TaskInput, emit: (e: TaskEvent) => void): P
       }
     }
 
-    const answer = await brain.synthesize({ goal: input.goal, findings });
+    const answer = await brain.synthesize({
+      goal: input.goal,
+      findings,
+      outputFields: input.outputFields,
+    });
     emit({
       type: "answer",
       answer: answer.answer,
       confidence: answer.confidence,
+      sources: answer.sources,
+      data: answer.data,
       spentUsdc: Number(spent.toFixed(6)),
       returnedUsdc: Number((budget - spent).toFixed(6)),
       receipt,
-      // Each fare is a Circle Gateway settlement (batched — no per-fare on-chain
-      // tx hash). The agent's wallet is the on-chain anchor: its USDC and its
-      // deposit into the Gateway contract are real, public Arc transactions.
       verifyUrl: `${config.arcExplorer}/address/${config.agentAddress}`,
     });
   } catch (e) {

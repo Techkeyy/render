@@ -12,17 +12,57 @@ async function getBrowser(): Promise<Browser> {
         "--no-sandbox",
         "--disable-dev-shm-usage",
         "--disable-blink-features=AutomationControlled",
-        // trim the footprint for 512 MB free-tier containers
         "--disable-gpu",
         "--disable-extensions",
         "--disable-background-networking",
         "--no-first-run",
         "--no-default-browser-check",
         "--mute-audio",
+        "--disable-infobars",
+        "--window-size=1366,900",
       ],
     });
   }
   return browserPromise;
+}
+
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+];
+
+const STEALTH_SCRIPT = `
+  Object.defineProperty(navigator, 'webdriver', { get: () => false });
+  Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => [1, 2, 3, 4, 5],
+  });
+  window.chrome = { runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
+  const origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+  window.navigator.permissions.query = (p) =>
+    p.name === 'notifications'
+      ? Promise.resolve({ state: Notification.permission })
+      : origQuery(p);
+`;
+
+const BLOCKED_RESOURCE_TYPES = new Set(["image", "media", "font"]);
+
+async function dismissCookieBanner(page: import("playwright").Page) {
+  const selectors = [
+    'button[class*="accept" i]', 'button[id*="accept" i]',
+    '[class*="cookie" i] button', '[id*="cookie" i] button',
+    '[class*="consent" i] button:first-of-type',
+    '[class*="gdpr" i] button',
+  ];
+  for (const sel of selectors) {
+    const btn = page.locator(sel).first();
+    if (await btn.isVisible({ timeout: 800 }).catch(() => false)) {
+      await btn.click().catch(() => {});
+      break;
+    }
+  }
 }
 
 export async function closeBrowser() {
@@ -105,23 +145,41 @@ export async function renderPage(
   const maxChars = opts.maxChars ?? 18000;
 
   const browser = await getBrowser();
+  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]!;
   const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    userAgent: ua,
     viewport: { width: 1366, height: 900 },
     locale: "en-US",
+    timezoneId: "America/New_York",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+      "sec-ch-ua": '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="8"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
+    },
   });
+
+  await context.addInitScript(STEALTH_SCRIPT);
+
   const page = await context.newPage();
+
+  await page.route("**/*", (route) => {
+    if (BLOCKED_RESOURCE_TYPES.has(route.request().resourceType())) return route.abort();
+    return route.continue();
+  });
+
   const started = Date.now();
   try {
     await page.goto(safe.toString(), { waitUntil: "domcontentloaded", timeout: timeoutMs });
-    // Best-effort settle for client-rendered pages; don't fail the whole render if it times out.
-    await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
+    await dismissCookieBanner(page).catch(() => {});
     await autoScroll(page).catch(() => {});
+    // Let any AJAX triggered by scrolling settle
+    await page.waitForTimeout(800);
 
     const title = (await page.title().catch(() => "")) || "";
     const text = await page.evaluate(() => {
-      const el = document.querySelector("main") ?? document.body;
+      const el = document.querySelector("article") ?? document.querySelector("main") ?? document.body;
       return (el as HTMLElement).innerText.replace(/\n{3,}/g, "\n\n").trim();
     });
 
