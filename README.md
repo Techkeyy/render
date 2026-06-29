@@ -136,12 +136,22 @@ npm run dev                       # http://localhost:5173
 - [x] Receipt — Circle Gateway settlement ref per fare + on-chain wallet link.
 - [x] Rate limiting — per-IP cap + wallet floor guard.
 - [x] Deployed — frontend (Vercel) + backend (Render.com).
+- [x] Watch mode — re-run a task on a schedule, alert when the answer changes.
+- [x] Citations — every claim in the answer cites the source URL that grounded it.
+- [x] Structured output — request typed JSON fields and get machine-readable data back.
+- [x] Stealth renderer — UA rotation, anti-fingerprinting, cookie-banner dismissal, resource blocking.
+- [x] Live stats counter — errands, unique users, USDC settled, shown on the landing page.
 - [ ] Record demo video and submit.
 
 ---
 
 ## Endpoints
 
-- `render-service` — `GET /health`, `GET /render?url=` (paywalled `$0.001`)
-- `orchestrator` — `GET /health`, `GET /balance`, `POST /task` (SSE stream of
-  `plan → open → paid → finding → stop → answer`)
+- `render-service` — `GET /health`, `GET /render?url=` (paywalled `$0.001`), `GET /tip?wallet=&name=`
+- `orchestrator`:
+  - `GET /health`, `GET /balance`, `GET /stats`
+  - `POST /task` (SSE stream of `plan → open → paid → tipped → finding → stop → answer`)
+  - `POST /watch` — create a recurring watch (re-runs task on interval, flags answer changes)
+  - `GET /watches` — list active watches
+  - `GET /watch/:id` — get a specific watch's status + latest answer
+  - `DELETE /watch/:id` — cancel a watch
