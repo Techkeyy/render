@@ -59,10 +59,14 @@ app.get("/render", requireSafeUrl, gateway.require(config.renderPrice), async (r
       },
     });
   } catch (e) {
-    // Render failed after payment. For the MVP we surface the error; a production
-    // build would void/refund the fare here.
-    console.error(`render failed for ${raw}: ${(e as Error).message}`);
-    res.status(502).json({ error: `render failed: ${(e as Error).message}`, url: raw });
+    const msg = (e as Error).message;
+    const isBotBlock = msg.startsWith("bot-blocked:");
+    console.error(`render ${isBotBlock ? "blocked" : "failed"} for ${raw}: ${msg}`);
+    res.status(isBotBlock ? 403 : 502).json({
+      error: isBotBlock ? msg : `render failed: ${msg}`,
+      url: raw,
+      botBlocked: isBotBlock,
+    });
   }
 });
 

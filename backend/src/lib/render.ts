@@ -49,6 +49,33 @@ const STEALTH_SCRIPT = `
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "media", "font"]);
 
+const BOT_BLOCK_TITLES = [
+  /just a moment/i,
+  /attention required/i,
+  /checking your browser/i,
+  /access denied/i,
+  /403 forbidden/i,
+  /please wait/i,
+  /security check/i,
+  /pardon our interruption/i,
+  /one more step/i,
+];
+
+async function detectBotBlock(page: import("playwright").Page): Promise<string | null> {
+  const title = await page.title().catch(() => "");
+  for (const pat of BOT_BLOCK_TITLES) {
+    if (pat.test(title)) return title;
+  }
+  const hasCfChallenge = await page
+    .locator("#cf-wrapper, #challenge-running, #challenge-form, .cf-browser-verification, #px-captcha")
+    .count()
+    .catch(() => 0);
+  if (hasCfChallenge > 0) return "cloudflare-challenge";
+  const bodyLen = await page.evaluate(() => (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length).catch(() => 0);
+  if (bodyLen < 80) return "empty-page";
+  return null;
+}
+
 async function dismissCookieBanner(page: import("playwright").Page) {
   const selectors = [
     'button[class*="accept" i]', 'button[id*="accept" i]',
@@ -164,6 +191,8 @@ export async function renderPage(
   const page = await context.newPage();
 
   await page.route("**/*", (route) => {
+    const url = route.request().url();
+    if (url.includes("/cdn-cgi/") || url.includes("challenges.cloudflare.com")) return route.continue();
     if (BLOCKED_RESOURCE_TYPES.has(route.request().resourceType())) return route.abort();
     return route.continue();
   });
@@ -172,9 +201,23 @@ export async function renderPage(
   try {
     await page.goto(safe.toString(), { waitUntil: "domcontentloaded", timeout: timeoutMs });
     await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
+
+    // Detect bot-block pages (Cloudflare, Akamai, PerimeterX, etc.)
+    let blocked = await detectBotBlock(page);
+    if (blocked) {
+      // Cloudflare JS challenges auto-resolve after ~5s — give it a chance
+      console.log(`bot challenge detected on ${raw} ("${blocked}"), waiting for resolution…`);
+      await page.waitForTimeout(6000);
+      await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+      blocked = await detectBotBlock(page);
+      if (blocked) {
+        throw new Error(`bot-blocked: site returned "${blocked}" — it has bot protection that blocks automated browsers`);
+      }
+      console.log(`challenge resolved for ${raw}`);
+    }
+
     await dismissCookieBanner(page).catch(() => {});
     await autoScroll(page).catch(() => {});
-    // Let any AJAX triggered by scrolling settle
     await page.waitForTimeout(800);
 
     const title = (await page.title().catch(() => "")) || "";

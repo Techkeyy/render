@@ -532,12 +532,17 @@ function EventRow({ e }: { e: TaskEvent }) {
         )}
       </Row>
     );
-  if (e.type === "render_error")
+  if (e.type === "render_error") {
+    const botBlocked = e.error.includes("bot-blocked");
     return (
-      <Row tone="muted">
-        <span className="num tc-url">{host(e.url)}</span> <span style={{ fontFamily: "var(--font-body)", fontSize: 13 }}>couldn't open — skipped</span>
+      <Row tone={botBlocked ? "accent" : "muted"}>
+        <span className="num tc-url">{host(e.url)}</span>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: 13, flex: 1 }}>
+          {botBlocked ? "blocked by bot protection — skipped" : "couldn't open — skipped"}
+        </span>
       </Row>
     );
+  }
   if (e.type === "stop")
     return (
       <Row tone="muted">
