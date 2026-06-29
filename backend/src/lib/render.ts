@@ -1,6 +1,10 @@
-import { chromium, type Browser } from "playwright";
+import { chromium } from "playwright-extra";
+import type { Browser } from "playwright";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { pathToFileURL } from "node:url";
 import { config } from "../config.ts";
+
+chromium.use(StealthPlugin());
 
 let browserPromise: Promise<Browser> | null = null;
 
@@ -32,20 +36,6 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 ];
-
-const STEALTH_SCRIPT = `
-  Object.defineProperty(navigator, 'webdriver', { get: () => false });
-  Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-  Object.defineProperty(navigator, 'plugins', {
-    get: () => [1, 2, 3, 4, 5],
-  });
-  window.chrome = { runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
-  const origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
-  window.navigator.permissions.query = (p) =>
-    p.name === 'notifications'
-      ? Promise.resolve({ state: Notification.permission })
-      : origQuery(p);
-`;
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "media", "font"]);
 
@@ -185,8 +175,6 @@ export async function renderPage(
       "sec-ch-ua-platform": '"Windows"',
     },
   });
-
-  await context.addInitScript(STEALTH_SCRIPT);
 
   const page = await context.newPage();
 
