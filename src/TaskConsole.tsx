@@ -141,13 +141,32 @@ export default function TaskConsole() {
   const [watchInterval, setWatchInterval] = useState(30);
   const [activeWatches, setActiveWatches] = useState<WatchInfo[]>([]);
 
+  const getMyWatchIds = (): string[] => {
+    try { return JSON.parse(localStorage.getItem("render_watches") ?? "[]"); } catch { return []; }
+  };
+  const saveWatchId = (id: string) => {
+    const ids = getMyWatchIds();
+    if (!ids.includes(id)) localStorage.setItem("render_watches", JSON.stringify([...ids, id]));
+  };
+  const removeWatchId = (id: string) => {
+    localStorage.setItem("render_watches", JSON.stringify(getMyWatchIds().filter((x) => x !== id)));
+  };
+
   useEffect(() => {
     let live = true;
-    const load = () =>
-      fetch(`${ORCH}/watches`)
-        .then((r) => r.json())
-        .then((d) => { if (live && Array.isArray(d)) setActiveWatches(d); })
-        .catch(() => {});
+    const load = () => {
+      const myIds = getMyWatchIds();
+      if (!myIds.length) { setActiveWatches([]); return; }
+      Promise.all(myIds.map((id) =>
+        fetch(`${ORCH}/watch/${id}`).then((r) => r.ok ? r.json() : null).catch(() => null)
+      )).then((results) => {
+        if (!live) return;
+        const valid = results.filter((w): w is WatchInfo => w !== null);
+        const gone = myIds.filter((id) => !valid.some((w) => w.id === id));
+        gone.forEach(removeWatchId);
+        setActiveWatches(valid);
+      });
+    };
     load();
     const id = setInterval(load, 15_000);
     return () => { live = false; clearInterval(id); };
@@ -189,6 +208,7 @@ export default function TaskConsole() {
         .then((d) => {
           if (d.error) setError(d.error);
           else {
+            if (d.id) saveWatchId(d.id);
             setEvents([{
               type: "answer",
               answer: d.currentAnswer ?? "Watch started — first result incoming.",
@@ -197,7 +217,10 @@ export default function TaskConsole() {
               returnedUsdc: budget,
               receipt: [],
             }]);
-            fetch(`${ORCH}/watches`).then(r => r.json()).then(w => { if (Array.isArray(w)) setActiveWatches(w); }).catch(() => {});
+            const myIds = getMyWatchIds();
+            Promise.all(myIds.map((id) =>
+              fetch(`${ORCH}/watch/${id}`).then(r => r.ok ? r.json() : null).catch(() => null)
+            )).then((results) => setActiveWatches(results.filter((w): w is WatchInfo => w !== null))).catch(() => {});
           }
         })
         .catch((e) => setError((e as Error).message))
