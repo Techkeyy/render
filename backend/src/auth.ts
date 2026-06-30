@@ -28,12 +28,13 @@ router.post("/token", requireCircle, async (req, res) => {
   if (!client) return res.status(503).json({ error: "Circle client unavailable" });
 
   try {
-    const userId = `render_${crypto.randomUUID()}`;
-    const response = await client.createUser({ userId });
+    const existing = typeof req.body?.userId === "string" && req.body.userId.startsWith("render_");
+    const userId = existing ? req.body.userId : `render_${crypto.randomUUID()}`;
+    if (!existing) await client.createUser({ userId });
     const tokenResponse = await client.createUserToken({ userId });
     const { userToken, encryptionKey } = tokenResponse.data!;
 
-    res.json({ userId, userToken, encryptionKey });
+    res.json({ userId, userToken, encryptionKey, returning: existing });
   } catch (e) {
     console.error("auth/token error:", e);
     res.status(500).json({ error: (e as Error).message });

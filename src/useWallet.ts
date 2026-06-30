@@ -57,11 +57,31 @@ export function useWallet() {
       .catch(() => {});
   }, []);
 
+  // Refresh token for returning users on mount
+  useEffect(() => {
+    const saved = loadSession();
+    if (!saved?.userId) return;
+    fetch(`${ORCH}/auth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: saved.userId }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(({ userToken, encryptionKey }) => {
+        const refreshed = { ...saved, userToken, encryptionKey };
+        setSession(refreshed);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+      })
+      .catch(() => {
+        setSession(null);
+        localStorage.removeItem(STORAGE_KEY);
+      });
+  }, []);
+
   const signIn = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     try {
-      // 1. Create Circle user + get credentials from our backend
       const tokenRes = await fetch(`${ORCH}/auth/token`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -70,7 +90,6 @@ export function useWallet() {
       if (!tokenRes.ok) throw new Error(`Token request failed: ${tokenRes.status}`);
       const { userId, userToken, encryptionKey } = await tokenRes.json();
 
-      // 2. Initialize wallet on ARC-TESTNET
       const initRes = await fetch(`${ORCH}/auth/init`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -79,7 +98,6 @@ export function useWallet() {
       if (!initRes.ok) throw new Error(`Init request failed: ${initRes.status}`);
       const { challengeId } = await initRes.json();
 
-      // 3. Execute wallet creation challenge via Circle SDK
       if (challengeId && CIRCLE_APP_ID) {
         const mod = await import("@circle-fin/w3s-pw-web-sdk");
         const W3SSdk = mod.W3SSdk ?? mod.default;
@@ -94,7 +112,6 @@ export function useWallet() {
         });
       }
 
-      // 4. Fetch the created wallet (may take a moment to propagate)
       let wallet: { id: string; address: string } | undefined;
       for (let attempt = 0; attempt < 5; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
