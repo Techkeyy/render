@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import TaskConsole from "./TaskConsole.tsx";
+import { useWallet } from "./useWallet.ts";
 
 const ORCH = (import.meta.env.VITE_ORCHESTRATOR_URL as string | undefined) ?? "http://localhost:4100";
 
@@ -149,6 +150,8 @@ function UseCase({ q, sub }: { q: string; sub: string }) {
 }
 
 export default function App() {
+  const { address: walletAddress, balance: walletBalance, loading: walletLoading, signIn, signOut, configured: walletConfigured } = useWallet();
+
   return (
     <div>
       {/* ---------- NAV ---------- */}
@@ -168,6 +171,28 @@ export default function App() {
           <button className="navlink hide-sm" onClick={scrollTo("why")}>Why it's different</button>
           <button className="navlink hide-sm" onClick={scrollTo("uses")}>Use it for</button>
           <AgentBalance />
+          {walletAddress ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="num" style={{ fontSize: 12.5, color: "var(--accent)" }}>
+                {walletBalance ?? "…"} USDC
+              </span>
+              <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
+              </span>
+              <button onClick={signOut} className="navlink" title="Sign out" style={{ fontSize: 13, lineHeight: 1, padding: "2px 4px" }}>
+                ×
+              </button>
+            </div>
+          ) : walletConfigured ? (
+            <button
+              onClick={signIn}
+              disabled={walletLoading}
+              className="btn btn-ghost"
+              style={{ fontSize: 12.5, padding: "6px 14px" }}
+            >
+              {walletLoading ? "…" : "Sign in"}
+            </button>
+          ) : null}
         </div>
       </nav>
 
@@ -292,7 +317,7 @@ export default function App() {
             paid through Circle Gateway from the agent's own on-chain wallet — which you can inspect.
           </p>
         </div>
-        <TaskConsole />
+        <TaskConsole walletAddress={walletAddress} />
       </section>
 
       {/* ---------- FOOTER ---------- */}

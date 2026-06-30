@@ -74,12 +74,15 @@ async function streamTask(
   body: { goal: string; seedUrls: string[]; budgetUsdc: number },
   handlers: { onEvent: (e: TaskEvent) => void; onDone: () => void; onError: (m: string) => void },
   signal: AbortSignal,
+  walletAddress?: string | null,
 ) {
   let res: Response;
   try {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (walletAddress) headers["x-wallet-address"] = walletAddress;
     res = await fetch(`${ORCH}/task`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal,
     });
@@ -129,7 +132,7 @@ async function streamTask(
   }
 }
 
-export default function TaskConsole() {
+export default function TaskConsole({ walletAddress }: { walletAddress?: string | null }) {
   const [goal, setGoal] = useState("");
   const [seeds, setSeeds] = useState("");
   const [budget, setBudget] = useState(0.02);
@@ -140,6 +143,25 @@ export default function TaskConsole() {
   const [watchMode, setWatchMode] = useState(false);
   const [watchInterval, setWatchInterval] = useState(30);
   const [activeWatches, setActiveWatches] = useState<WatchInfo[]>([]);
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const check = () =>
+      fetch(`${ORCH}/health`, { signal: AbortSignal.timeout(8000) })
+        .then((r) => {
+          if (r.ok && live) setBackendReady(true);
+          else if (live) setTimeout(check, 4000);
+        })
+        .catch(() => {
+          if (live) {
+            setBackendReady(false);
+            setTimeout(check, 4000);
+          }
+        });
+    check();
+    return () => { live = false; };
+  }, []);
 
   const getMyWatchIds = (): string[] => {
     try { return JSON.parse(localStorage.getItem("render_watches") ?? "[]"); } catch { return []; }
@@ -199,9 +221,11 @@ export default function TaskConsole() {
 
     if (watchMode) {
       setRunning(true);
+      const watchHeaders: Record<string, string> = { "content-type": "application/json" };
+      if (walletAddress) watchHeaders["x-wallet-address"] = walletAddress;
       fetch(`${ORCH}/watch`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: watchHeaders,
         body: JSON.stringify({ goal: goal.trim(), seedUrls, budgetUsdc: budget, intervalMin: watchInterval }),
       })
         .then((r) => r.json())
@@ -242,6 +266,7 @@ export default function TaskConsole() {
         },
       },
       ctrl.signal,
+      walletAddress,
     );
   }
 
@@ -254,6 +279,23 @@ export default function TaskConsole() {
 
   return (
     <div style={{ maxWidth: 880, margin: "0 auto", textAlign: "left" }}>
+      {/* ---------- cold-start banner ---------- */}
+      {backendReady === false && (
+        <div
+          style={{
+            padding: "14px 20px", marginBottom: 14, borderRadius: 10,
+            background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+            display: "flex", alignItems: "center", gap: 10,
+          }}
+        >
+          <span className="tc-dot" />
+          <span className="num" style={{ fontSize: 13, color: "var(--accent)" }}>
+            Waking up the agent…{" "}
+            <span style={{ color: "var(--text-3)", fontWeight: 400 }}>(free tier — takes ~30s)</span>
+          </span>
+        </div>
+      )}
+
       {/* ---------- input ---------- */}
       <div className="card" style={{ padding: 26 }}>
         <label className="eyebrow" style={{ display: "block", marginBottom: 12 }}>

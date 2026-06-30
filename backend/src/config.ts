@@ -49,6 +49,9 @@ export const config = {
   modelLoop: process.env.MODEL_LOOP ?? "deepseek-chat",
   modelPlan: process.env.MODEL_PLAN ?? "deepseek-chat",
 
+  // --- Circle Programmable Wallets (optional — enables social login + embedded wallets) ---
+  circleApiKey: (process.env.CIRCLE_API_KEY ?? "").trim(),
+
   // --- Safety caps ---
   maxPagesPerTask: Number(process.env.MAX_PAGES_PER_TASK ?? 12),
   renderTimeoutMs: Number(process.env.RENDER_TIMEOUT_MS ?? 22000),

@@ -3,6 +3,7 @@ import cors from "cors";
 import { config, requireWallets } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
 import { runTask, type TaskEvent, type TaskInput } from "./runner.ts";
+import authRouter from "./auth.ts";
 
 requireWallets();
 
@@ -10,6 +11,8 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
+
+app.use("/auth", authRouter);
 
 // --- Rate limiting (in-memory, per-IP) ---
 const RATE_LIMIT = 3;
@@ -118,8 +121,10 @@ app.get("/balance", async (_req, res) => {
 
 app.post("/task", async (req, res) => {
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
-  if (!checkRate(ip)) {
-    return res.status(429).json({ error: "Rate limit — max 3 tasks per hour. Try again later." });
+  const walletAddress = req.headers["x-wallet-address"] as string | undefined;
+  const hasWallet = walletAddress && /^0x[0-9a-fA-F]{40}$/.test(walletAddress);
+  if (!hasWallet && !checkRate(ip)) {
+    return res.status(429).json({ error: "Rate limit — max 3 tasks per hour. Connect a wallet for unlimited access." });
   }
   try {
     const wallet = new AgentWallet(config.agentPrivateKey);

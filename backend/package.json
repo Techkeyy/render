@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@circle-fin/user-controlled-wallets": "^10.7.1",
     "@circle-fin/x402-batching": "^3.0.4",
     "@x402/core": "^2.11.0",
     "@x402/evm": "^2.11.0",

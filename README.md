@@ -16,7 +16,8 @@ Built for the **Lepton Agents Hackathon** (Canteen × Circle × Arc).
 - **Backend:** <https://render-agent-neup.onrender.com> (free tier — ~50s cold start)
 - **Agent wallet:** [`0x5E64243D492183958595C64Be9609642BDF4cF11`](https://testnet.arcscan.app/address/0x5E64243D492183958595C64Be9609642BDF4cF11)
 
-No wallet needed. No sign-up. The agent pays from its own USDC on Arc Testnet.
+No sign-up required. The agent pays from its own USDC on Arc Testnet.
+Connect a wallet for unlimited access and real-time USDC balance on Arc.
 
 ---
 
@@ -77,6 +78,7 @@ own file at
 | **brain** (`backend/src/brain.ts`) | `plan()` · `assess()` (the spend decision) · `synthesize()`. OpenAI-compatible; **DeepSeek** `deepseek-chat` by default. |
 
 **Stack:** Arc Testnet (`eip155:5042002`) · Circle Gateway / x402-batching ·
+Circle Programmable Wallets SDK (`user-controlled-wallets`) ·
 USDC (`0x3600…0000`) · Playwright · DeepSeek · viem · Express · React + Vite.
 
 **Deploy:** Frontend on Vercel, backend on Render.com (single-process Docker
@@ -98,6 +100,14 @@ npm run generate-wallets          # writes seller + agent keys to .env.local
 1. Fund the **agent** wallet with Arc Testnet USDC at <https://faucet.circle.com/>
    (this pays for renders + gas).
 2. Add `DEEPSEEK_API_KEY=...` to `backend/.env.local` (the agent's brain).
+3. *(Optional — enables sign-in + embedded wallets)* Add to `backend/.env.local`:
+   ```
+   CIRCLE_API_KEY=...          # from console.circle.com → API Keys
+   ```
+   And add to the frontend `.env`:
+   ```
+   VITE_CIRCLE_APP_ID=...      # from console.circle.com → Wallets → User Controlled → Configurator
+   ```
 
 ```bash
 npm run render-service            # seller  on :4000
@@ -141,6 +151,8 @@ npm run dev                       # http://localhost:5173
 - [x] Structured output — request typed JSON fields and get machine-readable data back.
 - [x] Stealth renderer — UA rotation, anti-fingerprinting, cookie-banner dismissal, resource blocking.
 - [x] Live stats counter — errands, unique users, USDC settled, shown on the landing page.
+- [x] Wallet sign-in — Circle Programmable Wallets SDK; sign in → embedded wallet on Arc Testnet, USDC balance, unlimited errands.
+- [x] Cold-start UX — "waking up the agent…" indicator when the backend is cold-starting.
 - [ ] Record demo video and submit.
 
 ---
@@ -155,3 +167,8 @@ npm run dev                       # http://localhost:5173
   - `GET /watches` — list active watches
   - `GET /watch/:id` — get a specific watch's status + latest answer
   - `DELETE /watch/:id` — cancel a watch
+  - `GET /auth/configured` — check if Circle Wallets SDK is configured
+  - `POST /auth/token` — create Circle user + user token
+  - `POST /auth/init` — initialize wallet on ARC-TESTNET (returns challengeId)
+  - `GET /auth/wallets` — list user's wallets (requires `x-user-token` header)
+  - `GET /auth/balance/:walletId` — get wallet token balances
