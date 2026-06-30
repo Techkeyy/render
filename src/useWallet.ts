@@ -11,6 +11,7 @@ interface WalletSession {
   encryptionKey: string;
   walletId: string;
   address: string;
+  username: string;
 }
 
 const STORAGE_KEY = "render_session";
@@ -48,6 +49,7 @@ export function useWallet() {
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [configured, setConfigured] = useState(!!CIRCLE_APP_ID);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (CIRCLE_APP_ID) return;
@@ -60,11 +62,11 @@ export function useWallet() {
   // Refresh token for returning users on mount
   useEffect(() => {
     const saved = loadSession();
-    if (!saved?.userId) return;
+    if (!saved?.username) return;
     fetch(`${ORCH}/auth/token`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userId: saved.userId }),
+      body: JSON.stringify({ username: saved.username, login: true }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(({ userToken, encryptionKey }) => {
@@ -72,30 +74,36 @@ export function useWallet() {
         setSession(refreshed);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
       })
-      .catch(() => {
-        setSession(null);
-        localStorage.removeItem(STORAGE_KEY);
-      });
+      .catch(() => {});
   }, []);
 
-  const signIn = useCallback(async () => {
+  const signUp = useCallback(async (username: string) => {
     if (loading) return;
     setLoading(true);
+    setError(null);
     try {
       const tokenRes = await fetch(`${ORCH}/auth/token`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ username }),
       });
-      if (!tokenRes.ok) throw new Error(`Token request failed: ${tokenRes.status}`);
-      const { userId, userToken, encryptionKey } = await tokenRes.json();
+      if (!tokenRes.ok) {
+        const err = await tokenRes.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed: ${tokenRes.status}`);
+      }
+      const { userId, userToken, encryptionKey, returning } = await tokenRes.json();
+
+      if (returning) {
+        setError("Username taken. Log in instead.");
+        return;
+      }
 
       const initRes = await fetch(`${ORCH}/auth/init`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ userToken }),
       });
-      if (!initRes.ok) throw new Error(`Init request failed: ${initRes.status}`);
+      if (!initRes.ok) throw new Error(`Init failed: ${initRes.status}`);
       const { challengeId } = await initRes.json();
 
       if (challengeId && CIRCLE_APP_ID) {
@@ -124,18 +132,51 @@ export function useWallet() {
       }
 
       if (wallet) {
-        const s: WalletSession = {
-          userId,
-          userToken,
-          encryptionKey,
-          walletId: wallet.id,
-          address: wallet.address,
-        };
+        const s: WalletSession = { userId, userToken, encryptionKey, walletId: wallet.id, address: wallet.address, username };
         setSession(s);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
       }
     } catch (e) {
-      console.error("Sign-in error:", e);
+      console.error("Sign-up error:", e);
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading]);
+
+  const logIn = useCallback(async (username: string) => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const tokenRes = await fetch(`${ORCH}/auth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, login: true }),
+      });
+      if (tokenRes.status === 404) {
+        setError("No account found. Create one first.");
+        return;
+      }
+      if (!tokenRes.ok) throw new Error(`Request failed: ${tokenRes.status}`);
+      const { userId, userToken, encryptionKey } = await tokenRes.json();
+
+      const walletsRes = await fetch(`${ORCH}/auth/wallets`, {
+        headers: { "x-user-token": userToken },
+      });
+      const walletsData = await walletsRes.json();
+      const wallet = walletsData.wallets?.[0];
+
+      if (wallet) {
+        const s: WalletSession = { userId, userToken, encryptionKey, walletId: wallet.id, address: wallet.address, username };
+        setSession(s);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+      } else {
+        setError("Wallet not found. Try creating a new account.");
+      }
+    } catch (e) {
+      console.error("Login error:", e);
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -144,6 +185,7 @@ export function useWallet() {
   const signOut = useCallback(() => {
     setSession(null);
     setBalance(null);
+    setError(null);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
@@ -169,11 +211,14 @@ export function useWallet() {
 
   return {
     address: session?.address ?? null,
+    username: session?.username ?? null,
     balance,
     loading,
-    signIn,
+    signUp,
+    logIn,
     signOut,
     configured,
+    error,
     userToken: session?.userToken ?? null,
   };
 }

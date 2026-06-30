@@ -150,7 +150,10 @@ function UseCase({ q, sub }: { q: string; sub: string }) {
 }
 
 export default function App() {
-  const { address: walletAddress, balance: walletBalance, loading: walletLoading, signIn, signOut, configured: walletConfigured } = useWallet();
+  const { address: walletAddress, username: walletUsername, balance: walletBalance, loading: walletLoading, signUp, logIn, signOut, configured: walletConfigured, error: walletError } = useWallet();
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authName, setAuthName] = useState("");
+  const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
 
   return (
     <div>
@@ -177,21 +180,81 @@ export default function App() {
                 {walletBalance ?? "…"} USDC
               </span>
               <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>
-                {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
+                {walletUsername ?? walletAddress.slice(0, 6) + "…" + walletAddress.slice(-4)}
               </span>
               <button onClick={signOut} className="navlink" title="Sign out" style={{ fontSize: 13, lineHeight: 1, padding: "2px 4px" }}>
                 ×
               </button>
             </div>
           ) : walletConfigured ? (
-            <button
-              onClick={signIn}
-              disabled={walletLoading}
-              className="btn btn-ghost"
-              style={{ fontSize: 12.5, padding: "6px 14px" }}
-            >
-              {walletLoading ? "…" : "Sign in"}
-            </button>
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setAuthOpen(!authOpen)}
+                className="btn btn-ghost"
+                style={{ fontSize: 12.5, padding: "6px 14px" }}
+              >
+                {walletLoading ? "…" : "Sign in"}
+              </button>
+              {authOpen && !walletLoading && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 8px)", right: 0, width: 260,
+                  background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8,
+                  padding: 16, boxShadow: "0 8px 24px rgba(0,0,0,.12)", zIndex: 100,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "var(--text-1)" }}>
+                    {authMode === "signup" ? "Create your wallet" : "Welcome back"}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Choose a username"
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && authName.trim()) {
+                        if (authMode === "signup") signUp(authName.trim());
+                        else logIn(authName.trim());
+                        setAuthOpen(false);
+                      }
+                    }}
+                    style={{
+                      width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid var(--border)",
+                      borderRadius: 6, background: "transparent", color: "var(--text-1)", outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  {walletError && (
+                    <div style={{ fontSize: 11.5, color: "#c44", marginTop: 6 }}>{walletError}</div>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (!authName.trim()) return;
+                      if (authMode === "signup") signUp(authName.trim());
+                      else logIn(authName.trim());
+                      setAuthOpen(false);
+                    }}
+                    className="btn"
+                    style={{ width: "100%", fontSize: 12.5, padding: "8px 0", marginTop: 10 }}
+                  >
+                    {authMode === "signup" ? "Create wallet" : "Log in"}
+                  </button>
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 10, textAlign: "center" }}>
+                    {authMode === "signup" ? (
+                      <>Already have an account?{" "}
+                        <button onClick={() => setAuthMode("login")} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontSize: 11.5, padding: 0, textDecoration: "underline" }}>
+                          Log in
+                        </button>
+                      </>
+                    ) : (
+                      <>New here?{" "}
+                        <button onClick={() => setAuthMode("signup")} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontSize: 11.5, padding: 0, textDecoration: "underline" }}>
+                          Create wallet
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : null}
         </div>
       </nav>

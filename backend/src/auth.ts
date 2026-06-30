@@ -19,22 +19,36 @@ function requireCircle(_req: import("express").Request, res: import("express").R
   next();
 }
 
-function idempotencyKey(): string {
-  return crypto.randomUUID();
-}
+const usernameToUserId = new Map<string, string>();
 
 router.post("/token", requireCircle, async (req, res) => {
   const client = await getClient();
   if (!client) return res.status(503).json({ error: "Circle client unavailable" });
 
+  const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+  const loginOnly = req.body?.login === true;
+
   try {
-    const existing = typeof req.body?.userId === "string" && req.body.userId.startsWith("render_");
-    const userId = existing ? req.body.userId : `render_${crypto.randomUUID()}`;
-    if (!existing) await client.createUser({ userId });
+    if (loginOnly && username && !usernameToUserId.has(username)) {
+      return res.status(404).json({ error: "No account found. Create one first." });
+    }
+
+    let userId: string;
+    let returning = false;
+
+    if (username && usernameToUserId.has(username)) {
+      userId = usernameToUserId.get(username)!;
+      returning = true;
+    } else {
+      userId = `render_${crypto.randomUUID()}`;
+      await client.createUser({ userId });
+      if (username) usernameToUserId.set(username, userId);
+    }
+
     const tokenResponse = await client.createUserToken({ userId });
     const { userToken, encryptionKey } = tokenResponse.data!;
 
-    res.json({ userId, userToken, encryptionKey, returning: existing });
+    res.json({ userId, userToken, encryptionKey, returning });
   } catch (e) {
     console.error("auth/token error:", e);
     res.status(500).json({ error: (e as Error).message });
