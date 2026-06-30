@@ -94,12 +94,17 @@ export function useWallet() {
         });
       }
 
-      // 4. Fetch the created wallet
-      const walletsRes = await fetch(`${ORCH}/auth/wallets`, {
-        headers: { "x-user-token": userToken },
-      });
-      const walletsData = await walletsRes.json();
-      const wallet = walletsData.wallets?.[0];
+      // 4. Fetch the created wallet (may take a moment to propagate)
+      let wallet: { id: string; address: string } | undefined;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+        const walletsRes = await fetch(`${ORCH}/auth/wallets`, {
+          headers: { "x-user-token": userToken },
+        });
+        const walletsData = await walletsRes.json();
+        wallet = walletsData.wallets?.[0];
+        if (wallet?.address) break;
+      }
 
       if (wallet) {
         const s: WalletSession = {
