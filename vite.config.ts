@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { cpSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -18,5 +19,5 @@ function copyWellKnown(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), copyWellKnown()],
+  plugins: [react(), nodePolyfills(), copyWellKnown()],
 })
