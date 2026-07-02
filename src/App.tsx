@@ -435,10 +435,26 @@ export default function App() {
         />
       </section>
 
+      {/* ---------- PUBLISHER CTA ---------- */}
+      <section style={{ padding: "60px 32px", borderTop: "1px solid var(--border)", textAlign: "center" }}>
+        <div className="eyebrow" style={{ marginBottom: 12 }}>Own a website?</div>
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 30, fontWeight: 500, color: "var(--text-1)", margin: "0 0 12px" }}>
+          Get paid when AI agents read your site.
+        </h2>
+        <p style={{ fontSize: 15.5, color: "var(--text-2)", maxWidth: 520, margin: "0 auto 22px", lineHeight: 1.55 }}>
+          Host one small file on your domain and render's agent tips your wallet USDC
+          every time it reads one of your pages. No registration, no middleman.
+        </p>
+        <a href="/publishers" className="btn btn-primary" style={{ textDecoration: "none" }}>
+          Set up in a minute →
+        </a>
+      </section>
+
       {/* ---------- FOOTER ---------- */}
       <footer style={{ padding: "44px 32px", borderTop: "1px solid var(--border)" }}>
         <div style={{ maxWidth: maxw, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
           <div className="num" style={{ fontSize: 15, color: "var(--text-1)", fontWeight: 600 }}>render</div>
+          <a href="/publishers" className="num tc-link" style={{ fontSize: 12 }}>For publishers — get paid by agents</a>
           <div className="num" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
             An autonomous web-errand agent · built on Arc
           </div>
