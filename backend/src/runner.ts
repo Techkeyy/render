@@ -22,6 +22,8 @@ export type TaskEvent =
   // own wallet pays for the task (rather than the agent's house wallet).
   | { type: "funded"; amountUsdc: number; from: string; txId: string }
   | { type: "refunded"; amountUsdc: number; to: string; txHash: string | null }
+  // emitted by the orchestrator once the errand is saved — id powers the share permalink
+  | { type: "recorded"; id: string }
   | { type: "answer"; answer: string; confidence: string; sources: { url: string; claim: string }[]; data: Record<string, unknown> | null; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl: string }
   | { type: "error"; error: string };
 

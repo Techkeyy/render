@@ -117,6 +117,15 @@ app.get("/history", (req, res) => {
   res.json(store.data.tasks.filter((t) => t.user === user).slice(0, 20));
 });
 
+// One completed errand by id — powers the public share permalink (/r/:id on the frontend).
+// The owner's username stays private; everything else on the receipt is already public on-chain.
+app.get("/errand/:id", (req, res) => {
+  const t = store.data.tasks.find((x) => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: "errand not found" });
+  const { user: _user, ...pub } = t;
+  res.json(pub);
+});
+
 // Current spendable balance inside the agent's Gateway wallet.
 app.get("/balance", async (_req, res) => {
   try {
@@ -236,10 +245,12 @@ app.post("/task", async (req, res) => {
       tippedUsdc: Number(tippedThisTask.toFixed(6)),
       funded: !!funding,
       receipt: a?.receipt ?? [],
+      sources: a?.sources ?? [],
       createdAt: Date.now(),
     };
     store.data.tasks.unshift(record);
     store.touch();
+    send({ type: "recorded", id: record.id });
     // Return the unspent part of a user-funded budget to the user's wallet.
     if (funding) {
       const refund = Number((funding.amountUsdc - spentThisTask).toFixed(6));

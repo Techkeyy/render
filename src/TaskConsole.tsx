@@ -21,6 +21,7 @@ type TaskEvent =
   | { type: "stop"; reason: string }
   | { type: "funded"; amountUsdc: number; from: string; txId: string }
   | { type: "refunded"; amountUsdc: number; to: string; txHash: string | null }
+  | { type: "recorded"; id: string }
   | { type: "answer"; answer: string; confidence: string; sources?: { url: string; claim: string }[]; data?: Record<string, unknown> | null; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl?: string }
   | { type: "error"; error: string };
 
@@ -255,6 +256,16 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
 
   const plan = events.find((e) => e.type === "plan") as Extract<TaskEvent, { type: "plan" }> | undefined;
   const answer = events.find((e) => e.type === "answer") as Extract<TaskEvent, { type: "answer" }> | undefined;
+  const recordedId = (events.find((e) => e.type === "recorded") as Extract<TaskEvent, { type: "recorded" }> | undefined)?.id;
+  const [shareCopied, setShareCopied] = useState(false);
+
+  function copyShareLink() {
+    if (!recordedId) return;
+    navigator.clipboard.writeText(`${window.location.origin}/r/${recordedId}`).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2500);
+    }).catch(() => {});
+  }
   const spent =
     answer?.spentUsdc ??
     [...events].reverse().find((e): e is Extract<TaskEvent, { type: "paid" }> => e.type === "paid")?.spentUsdc ??
@@ -633,11 +644,23 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
             <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
               {answer.receipt.length} page{answer.receipt.length === 1 ? "" : "s"} · spent ${answer.spentUsdc.toFixed(3)} · ${answer.returnedUsdc.toFixed(3)} returned
             </span>
-            {answer.verifyUrl && (
-              <a className="num tc-link" href={answer.verifyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
-                Verify on Arc ↗
-              </a>
-            )}
+            <span style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              {recordedId && (
+                <button
+                  onClick={copyShareLink}
+                  className="num tc-link"
+                  style={{ fontSize: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  title="Copy a public link to this errand — answer + on-chain receipt"
+                >
+                  {shareCopied ? "Link copied ✓" : "Share ↗"}
+                </button>
+              )}
+              {answer.verifyUrl && (
+                <a className="num tc-link" href={answer.verifyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                  Verify on Arc ↗
+                </a>
+              )}
+            </span>
           </div>
           <div className="num" style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 10, lineHeight: 1.5 }}>
             {events.some((e) => e.type === "funded")

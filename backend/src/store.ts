@@ -27,6 +27,7 @@ export interface TaskRecord {
   /** True when the user's own wallet funded the errand. */
   funded: boolean;
   receipt: { url: string; title: string; paidUsdc: number; settlementId?: string }[];
+  sources: { url: string; claim: string }[];
   createdAt: number;
 }
 
