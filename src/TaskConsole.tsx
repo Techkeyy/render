@@ -158,6 +158,9 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
   const [watchInterval, setWatchInterval] = useState(30);
   const [activeWatches, setActiveWatches] = useState<WatchInfo[]>([]);
   const [backendReady, setBackendReady] = useState<boolean | null>(null);
+  // Signed-in users choose who funds the errand: their own wallet (a real
+  // PIN-approved USDC transfer, refunded if unspent) or the agent's wallet.
+  const [payFromMyWallet, setPayFromMyWallet] = useState(true);
 
   useEffect(() => {
     let live = true;
@@ -289,9 +292,9 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
       );
     };
 
-    // Signed-in users fund the errand from their own wallet: PIN-approve a USDC
-    // transfer of the budget to the agent, then the task runs against it.
-    if (walletAddress && fundTask) {
+    // Signed-in users can fund the errand from their own wallet: PIN-approve a
+    // USDC transfer of the budget to the agent, then the task runs against it.
+    if (walletAddress && fundTask && payFromMyWallet) {
       if (balance != null && Number(balance) < budget) {
         setError(
           `Your wallet has $${balance} USDC — this errand needs $${budget.toFixed(2)}. ` +
@@ -384,6 +387,31 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
               ))}
             </div>
           </div>
+          {walletAddress && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="eyebrow">Funded by</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {([["you", true], ["the agent", false]] as const).map(([label, mine]) => (
+                  <button
+                    key={label}
+                    onClick={() => setPayFromMyWallet(mine)}
+                    className="num"
+                    title={mine
+                      ? "You PIN-approve a USDC transfer of the budget; whatever the agent doesn't spend comes back to your wallet."
+                      : "The agent pays from its own wallet — no transfer from you."}
+                    style={{
+                      cursor: "pointer", padding: "7px 13px", borderRadius: 999, fontSize: 12.5,
+                      border: "1px solid " + (payFromMyWallet === mine ? "var(--accent-border)" : "var(--border-strong)"),
+                      background: payFromMyWallet === mine ? "var(--accent-dim)" : "transparent",
+                      color: payFromMyWallet === mine ? "var(--accent)" : "var(--text-2)",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={() => setWatchMode(!watchMode)}
@@ -429,7 +457,7 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
               disabled={!goal.trim() || funding}
               style={!goal.trim() || funding ? { opacity: 0.5, cursor: "default" } : undefined}
             >
-              {funding ? "Approving payment…" : watchMode ? "Start watching" : walletAddress && !watchMode ? "Fund & run the errand" : "Run the errand"}
+              {funding ? "Approving payment…" : watchMode ? "Start watching" : walletAddress && payFromMyWallet ? "Fund & run the errand" : "Run the errand"}
             </button>
           )}
         </div>
