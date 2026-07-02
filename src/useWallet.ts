@@ -210,13 +210,14 @@ export function useWallet() {
       await executeChallenge(challengeId, session.userToken, session.encryptionKey);
     }
 
-    // Wait for the transfer to confirm on Arc. Usually seconds, but Circle's
-    // pipeline can take a couple of minutes — give it 3 before giving up.
+    // Wait for the transfer to confirm on Arc. The status endpoint resolves the
+    // challenge to its transaction id (correlationIds), so this is exact.
     for (let attempt = 0; attempt < 60; attempt++) {
       await new Promise((r) => setTimeout(r, 3000));
-      const st = await fetch(`${ORCH}/auth/fund/status?refId=${encodeURIComponent(refId)}`, {
-        headers: { "x-user-token": session.userToken },
-      }).then((r) => r.json()).catch(() => null);
+      const st = await fetch(
+        `${ORCH}/auth/fund/status?challengeId=${encodeURIComponent(challengeId ?? "")}&refId=${encodeURIComponent(refId)}`,
+        { headers: { "x-user-token": session.userToken } },
+      ).then((r) => r.json()).catch(() => null);
       if (!st) continue;
       if (st.state === "CONFIRMED" || st.state === "COMPLETE") {
         readUsdcBalance(session.address).then(setBalance).catch(() => {});

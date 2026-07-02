@@ -143,9 +143,11 @@ router.post("/fund", requireCircle, async (req, res) => {
 });
 
 /**
- * Poll the state of a funding transfer by refId. The frontend calls this after
- * the PIN challenge until the transfer confirms, then starts the task with the
- * returned transaction id.
+ * Poll the state of a funding transfer. The challenge is the source of truth:
+ * for CREATE_TRANSACTION challenges, Circle puts the created transaction's id
+ * in challenge.correlationIds — so we resolve challenge → txId → tx state
+ * deterministically instead of fishing the transaction list (which failed to
+ * match in production and left users charged with no task).
  */
 router.get("/fund/status", requireCircle, async (req, res) => {
   const client = await getClient();
@@ -153,14 +155,37 @@ router.get("/fund/status", requireCircle, async (req, res) => {
 
   const userToken = req.headers["x-user-token"] as string;
   if (!userToken) return res.status(400).json({ error: "x-user-token header required" });
+  const challengeId = String(req.query.challengeId ?? "");
   const refId = String(req.query.refId ?? "");
-  if (!refId) return res.status(400).json({ error: "refId query param required" });
+  if (!challengeId && !refId) return res.status(400).json({ error: "challengeId (or refId) query param required" });
 
   try {
-    // No destinationAddress filter — Circle's filter is picky about address
-    // casing, and refId alone is unique to this funding attempt anyway.
-    const response = await client.listTransactions({ userToken });
-    const tx = (response.data?.transactions ?? []).find((t) => t.refId === refId);
+    let txId: string | undefined;
+
+    if (challengeId) {
+      const ch = await client.getUserChallenge({ userToken, challengeId });
+      const challenge = ch.data?.challenge;
+      if (!challenge) return res.json({ state: "PENDING" });
+      if (challenge.status === "FAILED" || challenge.status === "EXPIRED") {
+        console.warn(`fund challenge ${challengeId} ${challenge.status} (errorCode ${challenge.errorCode ?? "-"})`);
+        return res.json({ state: "FAILED", reason: `challenge ${challenge.status.toLowerCase()}` });
+      }
+      txId = challenge.correlationIds?.[0];
+      if (!txId) {
+        // User hasn't finished the PIN yet (or Circle hasn't attached the tx).
+        return res.json({ state: "PENDING", challengeStatus: challenge.status });
+      }
+    }
+
+    if (!txId && refId) {
+      // Legacy fallback: match by refId in the transaction list.
+      const response = await client.listTransactions({ userToken });
+      txId = (response.data?.transactions ?? []).find((t) => t.refId === refId)?.id;
+      if (!txId) return res.json({ state: "PENDING" });
+    }
+
+    const txRes = await client.getTransaction({ userToken, id: txId! });
+    const tx = txRes.data?.transaction;
     if (!tx) return res.json({ state: "PENDING" });
     res.json({ state: tx.state, txId: tx.id, txHash: tx.txHash ?? null, amounts: tx.amounts ?? [] });
   } catch (e) {
