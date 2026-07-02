@@ -150,8 +150,8 @@ app.get("/publishers/leaderboard", (_req, res) => {
 app.get("/errand/:id", (req, res) => {
   const t = store.data.tasks.find((x) => x.id === req.params.id);
   if (!t) return res.status(404).json({ error: "errand not found" });
-  const { user: _user, ...pub } = t;
-  res.json(pub);
+  // user: undefined drops the owner's username from the JSON output
+  res.json({ ...t, user: undefined });
 });
 
 // Current spendable balance inside the agent's Gateway wallet.

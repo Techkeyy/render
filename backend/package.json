@@ -6,6 +6,7 @@
   "description": "render — autonomous web-errand agent that pays per page it opens, on Arc",
   "scripts": {
     "generate-wallets": "tsx src/generate-wallets.ts",
+    "check-balance": "tsx src/check-balance.ts",
     "render-service": "tsx src/render-service.ts",
     "orchestrator": "tsx src/orchestrator.ts",
     "serve": "tsx src/serve.ts",

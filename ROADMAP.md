@@ -1,5 +1,11 @@
 # render — Roadmap to 10x
 
+> **Status (July 2):** P0 #1 (user-funded errands), #2 (persistent ledger — Upstash),
+> #3 (share permalinks), and #4 (publisher onboarding page + verify + leaderboard) are
+> **shipped and verified in production**. Accounts, history, and watches also persist
+> across redeploys. Remaining: demo video + submission (#5), traction outreach, and the
+> P1 items below.
+
 Cross-referenced against the **Lepton Agents Hackathon** judging criteria
 (submission deadline **July 6, 2026, 11:59 PM ET** — 4 days out):
 

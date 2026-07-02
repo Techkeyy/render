@@ -80,6 +80,18 @@ function host(u: string): string {
   }
 }
 
+// Anonymous users' watches are remembered per-browser (signed-in ones live server-side).
+function getMyWatchIds(): string[] {
+  try { return JSON.parse(localStorage.getItem("render_watches") ?? "[]"); } catch { return []; }
+}
+function saveWatchId(id: string) {
+  const ids = getMyWatchIds();
+  if (!ids.includes(id)) localStorage.setItem("render_watches", JSON.stringify([...ids, id]));
+}
+function removeWatchId(id: string) {
+  localStorage.setItem("render_watches", JSON.stringify(getMyWatchIds().filter((x) => x !== id)));
+}
+
 /** Shorten a Circle settlement reference for display (e.g. 149f55c5…796c8). */
 function shortRef(id?: string): string | null {
   if (!id) return null;
@@ -183,11 +195,9 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
   const [historyOpen, setHistoryOpen] = useState(false);
 
   // Account errand history — past answers + receipts, kept server-side.
+  // (Display is gated on `username`, so no reset needed when signed out.)
   useEffect(() => {
-    if (!username) {
-      setHistory([]);
-      return;
-    }
+    if (!username) return;
     let live = true;
     fetch(`${ORCH}/history?user=${encodeURIComponent(username)}`)
       .then((r) => (r.ok ? r.json() : []))
@@ -214,17 +224,6 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
     return () => { live = false; };
   }, []);
 
-  const getMyWatchIds = (): string[] => {
-    try { return JSON.parse(localStorage.getItem("render_watches") ?? "[]"); } catch { return []; }
-  };
-  const saveWatchId = (id: string) => {
-    const ids = getMyWatchIds();
-    if (!ids.includes(id)) localStorage.setItem("render_watches", JSON.stringify([...ids, id]));
-  };
-  const removeWatchId = (id: string) => {
-    localStorage.setItem("render_watches", JSON.stringify(getMyWatchIds().filter((x) => x !== id)));
-  };
-
   function cancelWatch(id: string) {
     const headers: Record<string, string> = {};
     if (username) headers["x-render-user"] = username;
@@ -238,6 +237,9 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
       .catch(() => {});
   }
 
+  // nowTick is snapshotted when watch data arrives, so render stays pure.
+  const [nowTick, setNowTick] = useState(0);
+
   useEffect(() => {
     let live = true;
     const load = () => {
@@ -245,13 +247,17 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
       if (username) {
         fetch(`${ORCH}/watches?user=${encodeURIComponent(username)}`)
           .then((r) => (r.ok ? r.json() : []))
-          .then((list: WatchInfo[]) => { if (live) setActiveWatches(list); })
+          .then((list: WatchInfo[]) => {
+            if (!live) return;
+            setActiveWatches(list);
+            setNowTick(Date.now());
+          })
           .catch(() => {});
         return;
       }
       // Anonymous: fall back to the ids this browser remembers.
       const myIds = getMyWatchIds();
-      if (!myIds.length) { setActiveWatches([]); return; }
+      if (!myIds.length) return;
       Promise.all(myIds.map((id) =>
         fetch(`${ORCH}/watch/${id}`).then((r) => r.ok ? r.json() : null).catch(() => null)
       )).then((results) => {
@@ -260,6 +266,7 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
         const gone = myIds.filter((id) => !valid.some((w) => w.id === id));
         gone.forEach(removeWatchId);
         setActiveWatches(valid);
+        setNowTick(Date.now());
       });
     };
     load();
@@ -719,9 +726,9 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
                   <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>every {w.intervalMin}m</span>
                   <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>{w.runs} run{w.runs === 1 ? "" : "s"}</span>
                   <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>${w.totalSpentUsdc.toFixed(3)} spent</span>
-                  {w.nextRunAt && (
+                  {w.nextRunAt && nowTick > 0 && (
                     <span className="num" style={{ fontSize: 12, color: "var(--text-3)" }}>
-                      next in {Math.max(0, Math.round((w.nextRunAt - Date.now()) / 60000))}m
+                      next in {Math.max(0, Math.round((w.nextRunAt - nowTick) / 60000))}m
                     </span>
                   )}
                 </div>

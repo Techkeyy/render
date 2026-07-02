@@ -210,9 +210,10 @@ export function useWallet() {
       await executeChallenge(challengeId, session.userToken, session.encryptionKey);
     }
 
-    // Wait for the transfer to confirm on Arc (usually a few seconds).
-    for (let attempt = 0; attempt < 30; attempt++) {
-      await new Promise((r) => setTimeout(r, 2000));
+    // Wait for the transfer to confirm on Arc. Usually seconds, but Circle's
+    // pipeline can take a couple of minutes — give it 3 before giving up.
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise((r) => setTimeout(r, 3000));
       const st = await fetch(`${ORCH}/auth/fund/status?refId=${encodeURIComponent(refId)}`, {
         headers: { "x-user-token": session.userToken },
       }).then((r) => r.json()).catch(() => null);
@@ -225,13 +226,17 @@ export function useWallet() {
         throw new Error(`Funding transfer ${String(st.state).toLowerCase()}.`);
       }
     }
-    throw new Error("Funding transfer didn't confirm in time. Your USDC was not lost — check your balance and try again.");
+    throw new Error(
+      "The transfer is taking longer than expected. If your balance already went down, " +
+      "the funds reached the agent — message us with your username and we'll return them. " +
+      "Otherwise, wait a minute and try again.",
+    );
   }, [session]);
 
   /** Re-read the on-chain balance now (e.g. after a refund lands). */
   const refreshBalance = useCallback(() => {
     if (session?.address) readUsdcBalance(session.address).then(setBalance).catch(() => {});
-  }, [session?.address]);
+  }, [session]);
 
   const signOut = useCallback(() => {
     setSession(null);
@@ -240,11 +245,9 @@ export function useWallet() {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  // (signOut clears the balance; when there's no session this effect just idles.)
   useEffect(() => {
-    if (!session?.address) {
-      setBalance(null);
-      return;
-    }
+    if (!session?.address) return;
     let live = true;
     const load = () =>
       readUsdcBalance(session.address)

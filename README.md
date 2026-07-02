@@ -91,13 +91,18 @@ a fixed list.
 | Feature | What it does |
 |---|---|
 | **Live task console** | Type a goal + budget, watch the agent plan, pay, and answer — fare by fare, in real time. |
-| **Wallet sign-in** | Sign in with Circle Programmable Wallets (PIN auth). Get your own wallet on Arc Testnet, see your USDC balance, and unlock unlimited errands. Returning users are recognized automatically. |
-| **Watch mode** | Set a task to re-run on a schedule — "tell me when this price drops below $80." The agent re-checks and flags when the answer changes. |
+| **Wallet sign-in** | Create a wallet or log in with a username (Circle Programmable Wallets, PIN auth). Accounts, history, and watches persist server-side. |
+| **User-funded errands** | Signed-in users PIN-approve a USDC transfer of the budget from *their* wallet; the agent runs on it and refunds the unspent part on-chain at task end. Or flip the toggle and let the agent's wallet pay. |
+| **Budget tiers** | Anonymous errands cap at $0.02 (shared agent wallet); signed-in users go to $0.50 on their own money. |
+| **Errand history** | Every task is recorded under the account — goal, answer, receipt, spend — shown in a "Your errands" panel. |
+| **Share permalinks** | Every completed errand gets a public link (`/r/:id`): answer, citations, and the on-chain receipt, plus a run-your-own CTA. |
+| **Watch mode** | Set a task to re-run on a schedule — "tell me when this price drops below $80." Account-owned, cancellable, survives backend restarts. |
 | **Citations** | Every claim in the answer links back to the source URL that grounded it. |
 | **Structured output** | Request typed JSON fields and get machine-readable data back alongside the natural-language answer. |
 | **Publisher tipping** | Sites that publish a `/.well-known/x402.json` receive a USDC tip every time the agent reads their content. |
+| **Publisher onboarding** | `/publishers`: generate your x402.json, step-by-step hosting directions, a live "verify my site" check, and a leaderboard of publishers actually paid. |
 | **Stealth renderer** | UA rotation, anti-fingerprinting, cookie-banner dismissal, resource blocking — the agent gets past the same defenses that block simpler scrapers. |
-| **Cold-start UX** | "Waking up the agent..." indicator when the free-tier backend is booting, so you're never staring at a blank screen. |
+| **Cold-start UX** | "Waking up the agent..." indicator + a keep-warm GitHub Action pinging the free-tier backend. |
 
 ---
 
@@ -109,7 +114,9 @@ a fixed list.
 | **render-service** (`backend/src/render-service.ts`) | The **seller**. An x402-paywalled `GET /render?url=`. Pay `$0.001` and it renders the page in headless Chromium and returns the human-visible text. SSRF-guarded. |
 | **orchestrator** (`backend/src/orchestrator.ts`) | The **buyer agent**. Given a goal + budget, plans which pages to open, pays the render-service per page, decides after each whether to continue, and synthesizes the answer — streaming the live receipt over SSE. |
 | **brain** (`backend/src/brain.ts`) | `plan()` · `assess()` (the spend-or-stop decision) · `synthesize()`. OpenAI-compatible; **DeepSeek** by default. |
-| **auth** (`backend/src/auth.ts`) | Circle Programmable Wallets integration — user creation, token refresh for returning users, wallet initialization on Arc Testnet. |
+| **auth** (`backend/src/auth.ts`) | Circle Programmable Wallets integration — user creation, log-in, wallet init on Arc Testnet, and user-initiated funding transfers (PIN-approved). |
+| **store** (`backend/src/store.ts`) | Persistence for stats, errand history, watches, and accounts. Local JSON file by default; Upstash Redis (REST) when configured — survives redeploys. |
+| **publishers** (`backend/src/publishers.ts`) | `/.well-known/x402.json` discovery (how the agent finds who to tip) + the live verify used by the onboarding page. |
 
 **Stack:**
 Arc Testnet (`eip155:5042002`) · Circle Gateway / x402-batching ·
@@ -186,25 +193,47 @@ npm run dev                       # http://localhost:5173
 - [x] Structured output — request typed JSON fields and get machine-readable data back.
 - [x] Stealth renderer — UA rotation, anti-fingerprinting, cookie-banner dismissal, resource blocking.
 - [x] Live stats counter — errands, unique users, USDC settled, shown on the landing page.
-- [x] Wallet sign-in — Circle Programmable Wallets SDK (PIN auth), returning user session refresh, embedded wallet on Arc Testnet, USDC balance, unlimited errands.
-- [x] Cold-start UX — "waking up the agent..." indicator when the backend is cold-starting.
+- [x] Wallet sign-in — Circle Programmable Wallets SDK (PIN auth), username log-in, embedded wallet on Arc Testnet, USDC balance, unlimited errands.
+- [x] Cold-start UX — "waking up the agent..." indicator + keep-warm GitHub Action.
 - [x] Publisher tipping — sites that publish `/.well-known/x402.json` receive automatic USDC tips.
+- [x] User-funded errands — PIN-approved budget transfer from the user's wallet, on-chain refund of the unspent part, server-side verification + replay guard.
+- [x] Persistent ledger — stats, history, watches, and accounts survive restarts (and redeploys with Upstash).
+- [x] Errand history — per-account past answers + receipts (`/history`).
+- [x] Share permalinks — public errand pages (`/r/:id`) with the on-chain receipt.
+- [x] Budget tiers — $0.02 anonymous / $0.50 signed-in, enforced server-side.
+- [x] Publisher onboarding — `/publishers` generator, live verify, tips leaderboard. First organic publisher onboarded and tipped (predict fun).
 - [ ] Record demo video and submit.
+
+---
+
+## Known limitations (hackathon scope)
+
+Deliberate shortcuts, disclosed:
+
+- **Usernames are not authenticated.** The `x-render-user` header is client-supplied — anyone claiming a username can read that account's errand history and cancel its watches. Wallet *funds* are still safe (moving money always needs the Circle PIN), but history/watches are best-effort identity. Production fix: bind requests to the Circle user token.
+- **Usernames are first-come, no recovery.** Forgot your username? That account's history is orphaned.
+- **User funding flows through the agent's wallet.** The budget transfer lands in the agent's own address and refunds come from it — custodial in all but name for the duration of a task. Production fix: per-task escrow contract.
+- **Single Node process.** A crash loses in-flight tasks (completed ones are already persisted).
+- **Testnet only.** All USDC is Arc Testnet USDC from the faucet.
 
 ---
 
 ## Endpoints
 
-- `render-service` — `GET /health`, `GET /render?url=` (paywalled `$0.001`), `GET /tip?wallet=&name=`
+- `render-service` — `GET /health`, `GET /render?url=` (paywalled `$0.001`), `GET /tip?wallet=&name=` (paywalled `$0.001`, pays the publisher)
 - `orchestrator`:
-  - `GET /health`, `GET /balance`, `GET /stats`
-  - `POST /task` — SSE stream: `plan → open → paid → tipped → finding → stop → answer`
-  - `POST /watch` — create a recurring watch
-  - `GET /watches` — list active watches
-  - `GET /watch/:id` — get a watch's status + latest answer
-  - `DELETE /watch/:id` — cancel a watch
-  - `POST /auth/token` — create or refresh Circle user token (accepts optional `userId` for returning users)
+  - `GET /health` (includes active store backend), `GET /balance`, `GET /stats`
+  - `POST /task` — SSE stream: `funded? → plan → open → paid → tipped → finding → stop → answer → refunded? → recorded`
+    (headers: `x-wallet-address` lifts the rate limit, `x-user-token` + body `fundingTxId` for user-funded runs, `x-render-user` ties it to an account)
+  - `GET /history?user=` — a user's past errands
+  - `GET /errand/:id` — one errand, public (powers `/r/:id` share pages)
+  - `POST /watch` / `GET /watches?user=` / `GET /watch/:id` / `DELETE /watch/:id` — recurring watches (owner-guarded delete)
+  - `GET /publishers/verify?domain=` — live check of a domain's x402.json
+  - `GET /publishers/leaderboard` — publishers actually tipped, from the ledger
+  - `POST /auth/token` — create account or log in (`{username, login?}`)
   - `POST /auth/init` — initialize wallet on ARC-TESTNET (returns challengeId)
+  - `POST /auth/fund` — start a PIN-approved USDC transfer of a task budget (returns challengeId + refId)
+  - `GET /auth/fund/status?refId=` — poll the funding transfer until confirmed
   - `GET /auth/wallets` — list user's wallets (requires `x-user-token`)
   - `GET /auth/balance/:walletId` — get wallet token balances
   - `GET /auth/configured` — check if Circle Wallets SDK is configured

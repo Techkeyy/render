@@ -69,7 +69,7 @@ function emptyData(): StoreData {
 
 let data: StoreData = emptyData();
 let saveTimer: NodeJS.Timeout | null = null;
-let backend: "upstash" | "file" = UPSTASH_URL && UPSTASH_TOKEN ? "upstash" : "file";
+const backend: "upstash" | "file" = UPSTASH_URL && UPSTASH_TOKEN ? "upstash" : "file";
 
 /** Which persistence backend is active — surfaced in /health for quick diagnosis. */
 export function storeBackend(): "upstash" | "file" {

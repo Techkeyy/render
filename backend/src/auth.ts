@@ -157,10 +157,9 @@ router.get("/fund/status", requireCircle, async (req, res) => {
   if (!refId) return res.status(400).json({ error: "refId query param required" });
 
   try {
-    const response = await client.listTransactions({
-      userToken,
-      destinationAddress: config.agentAddress,
-    });
+    // No destinationAddress filter — Circle's filter is picky about address
+    // casing, and refId alone is unique to this funding attempt anyway.
+    const response = await client.listTransactions({ userToken });
     const tx = (response.data?.transactions ?? []).find((t) => t.refId === refId);
     if (!tx) return res.json({ state: "PENDING" });
     res.json({ state: tx.state, txId: tx.id, txHash: tx.txHash ?? null, amounts: tx.amounts ?? [] });
