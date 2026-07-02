@@ -129,34 +129,45 @@ export default function PublishersPage() {
             </div>
             <pre className="num" style={{ margin: 0, fontSize: 12.5, color: "var(--text-1)", whiteSpace: "pre-wrap" }}>{fileJson}</pre>
           </div>
-          <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "0 0 12px", lineHeight: 1.5 }}>
-            <strong>Then put the file on your website.</strong> render can't install it for you — hosting it on
-            your own domain is how you prove the site is yours. When you're done, anyone should be able to open{" "}
-            <span className="num" style={{ fontSize: 12.5 }}>https://YOUR-DOMAIN/.well-known/x402.json</span> in a browser and see it.
+          <div className="eyebrow" style={{ margin: "18px 0 12px" }}>How to put it on your site</div>
+          <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 10, fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.55 }}>
+            <li>
+              <strong>Download the file</strong> (button above). You'll have a small file called{" "}
+              <span className="num" style={{ fontSize: 12 }}>x402.json</span> in your Downloads.
+            </li>
+            <li>
+              <strong>Add it to your website</strong> so it ends up at{" "}
+              <span className="num" style={{ fontSize: 12 }}>/.well-known/x402.json</span>. Where exactly depends on how your site is built:
+              <div style={{ display: "grid", gap: 6, marginTop: 8, fontSize: 13, color: "var(--text-3)" }}>
+                <div>
+                  · <strong style={{ color: "var(--text-2)" }}>Vercel / Netlify / Next.js / Vite:</strong> in your project's code, make a folder
+                  called <span className="num" style={{ fontSize: 12 }}>.well-known</span> inside the{" "}
+                  <span className="num" style={{ fontSize: 12 }}>public</span> folder, drop the file in, deploy as usual.
+                </div>
+                <div>
+                  · <strong style={{ color: "var(--text-2)" }}>GitHub Pages:</strong> same folder + file in your site repo, plus an empty file
+                  named <span className="num" style={{ fontSize: 12 }}>.nojekyll</span> at the top level (without it GitHub hides dot-folders).
+                </div>
+                <div>
+                  · <strong style={{ color: "var(--text-2)" }}>WordPress / cPanel hosting:</strong> open your host's File Manager, go to your
+                  site's top folder (usually <span className="num" style={{ fontSize: 12 }}>public_html</span>), create the{" "}
+                  <span className="num" style={{ fontSize: 12 }}>.well-known</span> folder if needed, upload the file into it.
+                </div>
+              </div>
+            </li>
+            <li>
+              <strong>Check it's up:</strong> open{" "}
+              <span className="num" style={{ fontSize: 12 }}>https://YOUR-DOMAIN/.well-known/x402.json</span> in your browser. If you can
+              see the file, you're done.
+            </li>
+            <li>
+              <strong>Verify below</strong> — type your domain in step 2 and hit Verify. Green check = agents can now pay you.
+            </li>
+          </ol>
+          <p style={{ fontSize: 13, color: "var(--text-3)", margin: "12px 0 0", lineHeight: 1.5 }}>
+            Not the technical person? Download the file and send it to whoever manages your website with one line:
+            “please host this at /.well-known/x402.json”. They'll know what to do.
           </p>
-          <div style={{ display: "grid", gap: 8, fontSize: 13, color: "var(--text-3)", lineHeight: 1.55 }}>
-            <div>
-              <strong style={{ color: "var(--text-2)" }}>Site built with Next.js, Vite, or similar (deployed on Vercel/Netlify)?</strong>{" "}
-              In your project's code, create a folder called <span className="num" style={{ fontSize: 12 }}>.well-known</span> inside
-              the <span className="num" style={{ fontSize: 12 }}>public</span> folder, put the downloaded file in it, and deploy like you
-              normally do. That's it.
-            </div>
-            <div>
-              <strong style={{ color: "var(--text-2)" }}>GitHub Pages?</strong> Add the same{" "}
-              <span className="num" style={{ fontSize: 12 }}>.well-known/x402.json</span> to your site repo, plus an empty file named{" "}
-              <span className="num" style={{ fontSize: 12 }}>.nojekyll</span> at the top level (without it, GitHub hides dot-folders).
-            </div>
-            <div>
-              <strong style={{ color: "var(--text-2)" }}>WordPress or a hosting control panel (cPanel etc.)?</strong>{" "}
-              Open your host's File Manager, go to your site's top folder (usually{" "}
-              <span className="num" style={{ fontSize: 12 }}>public_html</span>), create a folder named{" "}
-              <span className="num" style={{ fontSize: 12 }}>.well-known</span> if it isn't there, and upload the file into it.
-            </div>
-            <div>
-              <strong style={{ color: "var(--text-2)" }}>Not the technical person?</strong> Download the file and send it to whoever
-              manages your website with one line: “please host this at /.well-known/x402.json”. They'll know what to do.
-            </div>
-          </div>
         </div>
 
         {/* ---------- step 2: verify ---------- */}
