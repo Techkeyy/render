@@ -15,7 +15,8 @@ Built for the **Lepton Agents Hackathon** (Canteen x Circle x Arc).
 | | |
 |---|---|
 | **App** | <https://render-kmjq.vercel.app/> |
-| **Backend** | <https://render-agent-neup.onrender.com> (free tier — ~50s cold start) |
+| **For publishers** | <https://render-kmjq.vercel.app/publishers> — get paid when agents read your site |
+| **Backend** | <https://render-agent-neup.onrender.com> (free tier — kept warm by a GitHub Action) |
 | **Agent wallet** | [`0x5E64243D492183958595C64Be9609642BDF4cF11`](https://testnet.arcscan.app/address/0x5E64243D492183958595C64Be9609642BDF4cF11) |
 
 No sign-up required — the agent pays from its own wallet.
@@ -150,6 +151,12 @@ npm run generate-wallets          # writes seller + agent keys to .env.local
    ```
    VITE_CIRCLE_APP_ID=...      # from console.circle.com → Wallets → User Controlled → Configurator
    ```
+4. *(Optional — makes the ledger survive redeploys)* Add to `backend/.env.local`:
+   ```
+   UPSTASH_REDIS_REST_URL=...   # console.upstash.com → your database → REST API
+   UPSTASH_REDIS_REST_TOKEN=...
+   ```
+   Without these, stats/history/watches persist to a local JSON file instead.
 
 ```bash
 npm run render-service            # seller  on :4000
@@ -233,7 +240,7 @@ Deliberate shortcuts, disclosed:
   - `POST /auth/token` — create account or log in (`{username, login?}`)
   - `POST /auth/init` — initialize wallet on ARC-TESTNET (returns challengeId)
   - `POST /auth/fund` — start a PIN-approved USDC transfer of a task budget (returns challengeId + refId)
-  - `GET /auth/fund/status?refId=` — poll the funding transfer until confirmed
+  - `GET /auth/fund/status?challengeId=` — poll the funding transfer until confirmed (resolved via the challenge's `correlationIds`; `refId=` kept as fallback)
   - `GET /auth/wallets` — list user's wallets (requires `x-user-token`)
   - `GET /auth/balance/:walletId` — get wallet token balances
   - `GET /auth/configured` — check if Circle Wallets SDK is configured
