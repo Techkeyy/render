@@ -52,6 +52,8 @@ export interface StoreData {
   stats: { errands: number; users: string[]; settledUsdc: number; tippedUsdc: number };
   tasks: TaskRecord[];
   watches: WatchRecord[];
+  /** username → Circle userId. Persisted so returning users survive redeploys. */
+  accounts: Record<string, string>;
 }
 
 const FILE = path.join(process.cwd(), "data", "store.json");
@@ -62,7 +64,7 @@ const MAX_TASKS = 500;
 const SAVE_DEBOUNCE_MS = 1000;
 
 function emptyData(): StoreData {
-  return { stats: { errands: 0, users: [], settledUsdc: 0, tippedUsdc: 0 }, tasks: [], watches: [] };
+  return { stats: { errands: 0, users: [], settledUsdc: 0, tippedUsdc: 0 }, tasks: [], watches: [], accounts: {} };
 }
 
 let data: StoreData = emptyData();
@@ -81,6 +83,7 @@ function normalize(raw: unknown): StoreData {
     stats: { ...base.stats, ...(d.stats ?? {}) },
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     watches: Array.isArray(d.watches) ? d.watches : [],
+    accounts: d.accounts && typeof d.accounts === "object" ? d.accounts : {},
   };
 }
 

@@ -173,6 +173,7 @@ export default function App() {
           <button className="navlink hide-sm" onClick={scrollTo("how")}>How it works</button>
           <button className="navlink hide-sm" onClick={scrollTo("why")}>Why it's different</button>
           <button className="navlink hide-sm" onClick={scrollTo("uses")}>Use it for</button>
+          <a className="navlink hide-sm" href="/publishers" style={{ textDecoration: "none" }}>For publishers</a>
           <AgentBalance />
           {walletAddress ? (
             <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>

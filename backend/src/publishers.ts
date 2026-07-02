@@ -35,6 +35,38 @@ function isAddress(v: unknown): v is `0x${string}` {
 }
 
 /**
+ * Live, cache-free check of a domain's /.well-known/x402.json — used by the
+ * publisher onboarding page's "verify my site" button. Returns a specific
+ * reason on failure so site owners can fix their file.
+ */
+export async function verifyPublisherFile(
+  domain: string,
+): Promise<{ found: true; name: string; wallet: string } | { found: false; reason: string }> {
+  const host = domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "").toLowerCase();
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return { found: false, reason: "That doesn't look like a domain." };
+  if (isPrivateHost(host)) return { found: false, reason: "Private/internal hosts can't be verified." };
+  try {
+    const res = await fetch(`https://${host}/.well-known/x402.json`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return { found: false, reason: `https://${host}/.well-known/x402.json returned ${res.status}.` };
+    let data: { name?: string; wallet?: string; address?: string };
+    try {
+      data = (await res.json()) as typeof data;
+    } catch {
+      return { found: false, reason: "The file exists but isn't valid JSON." };
+    }
+    const wallet = data.wallet ?? data.address;
+    if (!isAddress(wallet)) return { found: false, reason: 'The file needs a "wallet" field with a 0x… address.' };
+    cache.set(host, { name: data.name ?? host, wallet, source: "well-known" });
+    return { found: true, name: data.name ?? host, wallet };
+  } catch {
+    return { found: false, reason: `Couldn't reach https://${host} — is the file live?` };
+  }
+}
+
+/**
  * Decide who to pay for reading a page.
  *
  * The open mechanism: fetch the publisher's own /.well-known/x402.json — any

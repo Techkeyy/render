@@ -225,6 +225,19 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
     localStorage.setItem("render_watches", JSON.stringify(getMyWatchIds().filter((x) => x !== id)));
   };
 
+  function cancelWatch(id: string) {
+    const headers: Record<string, string> = {};
+    if (username) headers["x-render-user"] = username;
+    fetch(`${ORCH}/watch/${id}`, { method: "DELETE", headers })
+      .then((r) => {
+        if (r.ok || r.status === 404) {
+          removeWatchId(id);
+          setActiveWatches((prev) => prev.filter((w) => w.id !== id));
+        }
+      })
+      .catch(() => {});
+  }
+
   useEffect(() => {
     let live = true;
     const load = () => {
@@ -677,12 +690,22 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
           <div style={{ display: "grid", gap: 10 }}>
             {activeWatches.map((w) => (
               <div key={w.id} className="card" style={{ padding: "16px 20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, gap: 10 }}>
                   <span style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: "var(--text-1)" }}>
                     "{w.goal.length > 60 ? w.goal.slice(0, 57) + "…" : w.goal}"
                   </span>
-                  <span className="num" style={{ fontSize: 11, color: w.changed ? "var(--accent)" : "var(--text-3)" }}>
-                    {w.changed ? "changed!" : w.status}
+                  <span style={{ display: "flex", gap: 12, alignItems: "baseline", flexShrink: 0 }}>
+                    <span className="num" style={{ fontSize: 11, color: w.changed ? "var(--accent)" : "var(--text-3)" }}>
+                      {w.changed ? "changed!" : w.status}
+                    </span>
+                    <button
+                      onClick={() => cancelWatch(w.id)}
+                      className="num"
+                      title="Cancel this watch"
+                      style={{ fontSize: 11, color: "var(--text-3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                    >
+                      cancel ×
+                    </button>
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>

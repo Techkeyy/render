@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { config } from "./config.ts";
+import { store } from "./store.ts";
 
 const router = Router();
 
@@ -19,7 +20,15 @@ function requireCircle(_req: import("express").Request, res: import("express").R
   next();
 }
 
-const usernameToUserId = new Map<string, string>();
+// username → Circle userId, persisted in the store so accounts survive redeploys.
+const accounts = {
+  has: (u: string) => u in store.data.accounts,
+  get: (u: string) => store.data.accounts[u],
+  set: (u: string, id: string) => {
+    store.data.accounts[u] = id;
+    store.touch();
+  },
+};
 
 router.post("/token", requireCircle, async (req, res) => {
   const client = await getClient();
@@ -29,20 +38,20 @@ router.post("/token", requireCircle, async (req, res) => {
   const loginOnly = req.body?.login === true;
 
   try {
-    if (loginOnly && username && !usernameToUserId.has(username)) {
+    if (loginOnly && username && !accounts.has(username)) {
       return res.status(404).json({ error: "No account found. Create one first." });
     }
 
     let userId: string;
     let returning = false;
 
-    if (username && usernameToUserId.has(username)) {
-      userId = usernameToUserId.get(username)!;
+    if (username && accounts.has(username)) {
+      userId = accounts.get(username)!;
       returning = true;
     } else {
       userId = `render_${crypto.randomUUID()}`;
       await client.createUser({ userId });
-      if (username) usernameToUserId.set(username, userId);
+      if (username) accounts.set(username, userId);
     }
 
     const tokenResponse = await client.createUserToken({ userId });

@@ -5,6 +5,7 @@ import { AgentWallet } from "./lib/pay.ts";
 import { runTask, type TaskEvent, type TaskInput } from "./runner.ts";
 import authRouter, { verifyFundingTx } from "./auth.ts";
 import { loadStore, store, storeBackend, type TaskRecord, type WatchRecord } from "./store.ts";
+import { verifyPublisherFile } from "./publishers.ts";
 
 requireWallets();
 
@@ -115,6 +116,33 @@ app.get("/history", (req, res) => {
   const user = sanitizeUser(req.query.user);
   if (!user) return res.status(400).json({ error: "user query param required" });
   res.json(store.data.tasks.filter((t) => t.user === user).slice(0, 20));
+});
+
+// Publisher onboarding: live check of a domain's /.well-known/x402.json.
+app.get("/publishers/verify", async (req, res) => {
+  const domain = String(req.query.domain ?? "").trim();
+  if (!domain) return res.status(400).json({ error: "domain query param required" });
+  res.json(await verifyPublisherFile(domain));
+});
+
+// Publisher leaderboard: tips actually paid out, aggregated from the ledger.
+app.get("/publishers/leaderboard", (_req, res) => {
+  const totals = new Map<string, { publisher: string; tips: number; totalUsdc: number }>();
+  for (const t of store.data.tasks) {
+    for (const r of t.receipt) {
+      if (!r.title.startsWith("tip → ")) continue;
+      const name = r.title.slice("tip → ".length);
+      const row = totals.get(name) ?? { publisher: name, tips: 0, totalUsdc: 0 };
+      row.tips++;
+      row.totalUsdc += r.paidUsdc;
+      totals.set(name, row);
+    }
+  }
+  const list = [...totals.values()]
+    .map((r) => ({ ...r, totalUsdc: Number(r.totalUsdc.toFixed(6)) }))
+    .sort((a, b) => b.totalUsdc - a.totalUsdc)
+    .slice(0, 20);
+  res.json(list);
 });
 
 // One completed errand by id — powers the public share permalink (/r/:id on the frontend).
@@ -353,6 +381,10 @@ app.get("/watch/:id", (req, res) => {
 app.delete("/watch/:id", (req, res) => {
   const w = getWatch(req.params.id);
   if (!w) return res.status(404).json({ error: "watch not found" });
+  // Account-owned watches can only be cancelled by their owner.
+  if (w.owner && w.owner !== sanitizeUser(req.headers["x-render-user"])) {
+    return res.status(403).json({ error: "This watch belongs to another account." });
+  }
   stopWatchTimer(w.id);
   store.data.watches = store.data.watches.filter((x) => x.id !== w.id);
   store.touch();
