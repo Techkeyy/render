@@ -295,7 +295,8 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
       if (balance != null && Number(balance) < budget) {
         setError(
           `Your wallet has $${balance} USDC — this errand needs $${budget.toFixed(2)}. ` +
-          `Top up free testnet USDC at faucet.circle.com (select Arc Testnet).`,
+          `Click your username in the top bar to copy your wallet address, then get free ` +
+          `testnet USDC at faucet.circle.com (select Arc Testnet).`,
         );
         return;
       }

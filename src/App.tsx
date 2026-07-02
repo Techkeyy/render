@@ -175,16 +175,60 @@ export default function App() {
           <button className="navlink hide-sm" onClick={scrollTo("uses")}>Use it for</button>
           <AgentBalance />
           {walletAddress ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
               <span className="num" style={{ fontSize: 12.5, color: "var(--accent)" }}>
                 {walletBalance ?? "…"} USDC
               </span>
-              <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>
-                {walletUsername ?? walletAddress.slice(0, 6) + "…" + walletAddress.slice(-4)}
-              </span>
+              <button
+                onClick={() => setAuthOpen(!authOpen)}
+                className="num navlink"
+                title="Your wallet"
+                style={{ fontSize: 11, color: "var(--text-3)", padding: "2px 4px" }}
+              >
+                {walletUsername ?? walletAddress.slice(0, 6) + "…" + walletAddress.slice(-4)} ▾
+              </button>
               <button onClick={signOut} className="navlink" title="Sign out" style={{ fontSize: 13, lineHeight: 1, padding: "2px 4px" }}>
                 ×
               </button>
+              {authOpen && (
+                <div
+                  className="card"
+                  style={{
+                    position: "absolute", top: "calc(100% + 10px)", right: 0, width: 300,
+                    padding: 18, zIndex: 60, textAlign: "left",
+                  }}
+                >
+                  <div className="eyebrow" style={{ marginBottom: 8 }}>Your wallet on Arc</div>
+                  <div className="num" style={{ fontSize: 11.5, color: "var(--text-2)", wordBreak: "break-all", marginBottom: 10 }}>
+                    {walletAddress}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, padding: "6px 12px" }}
+                      onClick={() => navigator.clipboard.writeText(walletAddress)}
+                    >
+                      Copy address
+                    </button>
+                    <a
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, padding: "6px 12px", textDecoration: "none" }}
+                      href={`https://testnet.arcscan.app/address/${walletAddress}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View on Arc ↗
+                    </a>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.5 }}>
+                    Need testnet USDC? Copy your address, then request funds at{" "}
+                    <a className="tc-link" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">
+                      faucet.circle.com
+                    </a>{" "}
+                    — select <strong>Arc Testnet</strong>.
+                  </div>
+                </div>
+              )}
             </div>
           ) : walletConfigured ? (
             <div style={{ position: "relative" }}>
