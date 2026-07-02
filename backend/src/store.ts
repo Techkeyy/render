@@ -68,6 +68,11 @@ let data: StoreData = emptyData();
 let saveTimer: NodeJS.Timeout | null = null;
 let backend: "upstash" | "file" = UPSTASH_URL && UPSTASH_TOKEN ? "upstash" : "file";
 
+/** Which persistence backend is active — surfaced in /health for quick diagnosis. */
+export function storeBackend(): "upstash" | "file" {
+  return backend;
+}
+
 function normalize(raw: unknown): StoreData {
   const d = (raw ?? {}) as Partial<StoreData>;
   const base = emptyData();

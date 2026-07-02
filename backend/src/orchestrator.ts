@@ -4,7 +4,7 @@ import { config, requireWallets } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
 import { runTask, type TaskEvent, type TaskInput } from "./runner.ts";
 import authRouter, { verifyFundingTx } from "./auth.ts";
-import { loadStore, store, type TaskRecord, type WatchRecord } from "./store.ts";
+import { loadStore, store, storeBackend, type TaskRecord, type WatchRecord } from "./store.ts";
 
 requireWallets();
 
@@ -98,7 +98,7 @@ function checkRate(ip: string): boolean {
 }
 
 app.get("/health", (_req, res) =>
-  res.json({ ok: true, service: "orchestrator", agent: config.agentAddress, renderService: config.renderServiceUrl }),
+  res.json({ ok: true, service: "orchestrator", agent: config.agentAddress, renderService: config.renderServiceUrl, store: storeBackend() }),
 );
 
 app.get("/stats", (_req, res) =>
