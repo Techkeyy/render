@@ -24,6 +24,21 @@ function loadSession(): WalletSession | null {
   }
 }
 
+/** Run a Circle challenge (PIN prompt) in the web SDK and wait for the user to approve it. */
+async function executeChallenge(challengeId: string, userToken: string, encryptionKey: string): Promise<void> {
+  const mod = await import("@circle-fin/w3s-pw-web-sdk");
+  const W3SSdk = mod.W3SSdk ?? mod.default;
+  const sdk = new W3SSdk();
+  sdk.setAppSettings({ appId: CIRCLE_APP_ID });
+  sdk.setAuthentication({ userToken, encryptionKey });
+  await new Promise<void>((resolve, reject) => {
+    sdk.execute(challengeId, (err: unknown) => {
+      if (err) reject(err instanceof Error ? err : new Error(String((err as { message?: string })?.message ?? err)));
+      else resolve();
+    });
+  });
+}
+
 async function readUsdcBalance(address: string): Promise<string> {
   const padded = address.slice(2).toLowerCase().padStart(64, "0");
   const res = await fetch(ARC_RPC, {
@@ -107,17 +122,7 @@ export function useWallet() {
       const { challengeId } = await initRes.json();
 
       if (challengeId && CIRCLE_APP_ID) {
-        const mod = await import("@circle-fin/w3s-pw-web-sdk");
-        const W3SSdk = mod.W3SSdk ?? mod.default;
-        const sdk = new W3SSdk();
-        sdk.setAppSettings({ appId: CIRCLE_APP_ID });
-        sdk.setAuthentication({ userToken, encryptionKey });
-        await new Promise<void>((resolve, reject) => {
-          sdk.execute(challengeId, (err: unknown) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        await executeChallenge(challengeId, userToken, encryptionKey);
       }
 
       let wallet: { id: string; address: string } | undefined;
@@ -182,6 +187,52 @@ export function useWallet() {
     }
   }, [loading]);
 
+  /**
+   * Fund a task from the user's own wallet: create a USDC transfer to the
+   * agent, have the user approve it with their PIN, then wait for it to
+   * confirm on Arc. Returns the Circle transaction id the orchestrator
+   * verifies before running the task. Throws on failure — the caller shows
+   * the error next to the task, not in the sign-in UI.
+   */
+  const fundTask = useCallback(async (amountUsdc: number): Promise<{ txId: string }> => {
+    if (!session) throw new Error("Sign in first.");
+    const fundRes = await fetch(`${ORCH}/auth/fund`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-user-token": session.userToken },
+      body: JSON.stringify({ walletId: session.walletId, amount: amountUsdc }),
+    });
+    if (!fundRes.ok) {
+      const err = await fundRes.json().catch(() => ({}));
+      throw new Error(err.error || `Funding failed: ${fundRes.status}`);
+    }
+    const { challengeId, refId } = await fundRes.json();
+    if (challengeId && CIRCLE_APP_ID) {
+      await executeChallenge(challengeId, session.userToken, session.encryptionKey);
+    }
+
+    // Wait for the transfer to confirm on Arc (usually a few seconds).
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const st = await fetch(`${ORCH}/auth/fund/status?refId=${encodeURIComponent(refId)}`, {
+        headers: { "x-user-token": session.userToken },
+      }).then((r) => r.json()).catch(() => null);
+      if (!st) continue;
+      if (st.state === "CONFIRMED" || st.state === "COMPLETE") {
+        readUsdcBalance(session.address).then(setBalance).catch(() => {});
+        return { txId: st.txId };
+      }
+      if (["FAILED", "DENIED", "CANCELLED"].includes(st.state)) {
+        throw new Error(`Funding transfer ${String(st.state).toLowerCase()}.`);
+      }
+    }
+    throw new Error("Funding transfer didn't confirm in time. Your USDC was not lost — check your balance and try again.");
+  }, [session]);
+
+  /** Re-read the on-chain balance now (e.g. after a refund lands). */
+  const refreshBalance = useCallback(() => {
+    if (session?.address) readUsdcBalance(session.address).then(setBalance).catch(() => {});
+  }, [session?.address]);
+
   const signOut = useCallback(() => {
     setSession(null);
     setBalance(null);
@@ -217,6 +268,8 @@ export function useWallet() {
     signUp,
     logIn,
     signOut,
+    fundTask,
+    refreshBalance,
     configured,
     error,
     userToken: session?.userToken ?? null,

@@ -18,6 +18,10 @@ export type TaskEvent =
   | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
+  // funded/refunded are emitted by the orchestrator when the signed-in user's
+  // own wallet pays for the task (rather than the agent's house wallet).
+  | { type: "funded"; amountUsdc: number; from: string; txId: string }
+  | { type: "refunded"; amountUsdc: number; to: string; txHash: string | null }
   | { type: "answer"; answer: string; confidence: string; sources: { url: string; claim: string }[]; data: Record<string, unknown> | null; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl: string }
   | { type: "error"; error: string };
 

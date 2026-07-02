@@ -1,5 +1,14 @@
 import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { createWalletClient, createPublicClient, http, parseUnits, defineChain, erc20Abi } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { config } from "../config.ts";
+
+const arcTestnet = defineChain({
+  id: 5042002,
+  name: "Arc Testnet",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: [config.arcRpc] } },
+});
 
 /**
  * The agent's payment client. Wraps Circle's GatewayClient so the rest of the
@@ -45,6 +54,24 @@ export class AgentWallet {
       data,
     };
   }
+  /**
+   * Plain on-chain USDC transfer from the agent's wallet — used to refund the
+   * unspent part of a user-funded task budget back to the user's wallet.
+   */
+  async transferUsdc(to: `0x${string}`, amountUsdc: number): Promise<string> {
+    const account = privateKeyToAccount(config.agentPrivateKey);
+    const walletClient = createWalletClient({ account, chain: arcTestnet, transport: http() });
+    const publicClient = createPublicClient({ chain: arcTestnet, transport: http() });
+    const hash = await walletClient.writeContract({
+      address: config.usdcAddress,
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [to, parseUnits(amountUsdc.toFixed(6), 6)],
+    });
+    await publicClient.waitForTransactionReceipt({ hash, timeout: 30_000 });
+    return hash;
+  }
+
   /** Send the per-read tip to a publisher's own wallet (a real x402 settlement). */
   async tipPublisher(wallet: string, name: string): Promise<{ tipUsdc: number; settlementId?: string; publisher: string; publisherWallet: string }> {
     const target = `${config.renderServiceUrl}/tip?wallet=${encodeURIComponent(wallet)}&name=${encodeURIComponent(name)}`;

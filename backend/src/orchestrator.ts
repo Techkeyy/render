@@ -3,7 +3,7 @@ import cors from "cors";
 import { config, requireWallets } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
 import { runTask, type TaskEvent, type TaskInput } from "./runner.ts";
-import authRouter from "./auth.ts";
+import authRouter, { verifyFundingTx } from "./auth.ts";
 
 requireWallets();
 
@@ -119,6 +119,10 @@ app.get("/balance", async (_req, res) => {
   }
 });
 
+// Funding transactions already consumed by a task — a tx id pays for one task only.
+const usedFundingTxIds = new Set<string>();
+const MIN_REFUND_USDC = 0.001;
+
 app.post("/task", async (req, res) => {
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
   const walletAddress = req.headers["x-wallet-address"] as string | undefined;
@@ -134,7 +138,7 @@ app.post("/task", async (req, res) => {
     }
   } catch { /* if balance check fails, let the task attempt anyway */ }
 
-  const { goal, seedUrls, budgetUsdc, outputFields } = req.body ?? {};
+  const { goal, seedUrls, budgetUsdc, outputFields, fundingTxId } = req.body ?? {};
   if (typeof goal !== "string" || !goal.trim()) {
     return res.status(400).json({ error: "goal (string) is required" });
   }
@@ -145,6 +149,21 @@ app.post("/task", async (req, res) => {
     outputFields: Array.isArray(outputFields) ? outputFields.filter((f: unknown) => typeof f === "string") : undefined,
   };
 
+  // --- User-funded task: verify the user's USDC transfer to the agent before running ---
+  const userToken = req.headers["x-user-token"] as string | undefined;
+  let funding: { txId: string; from: `0x${string}`; amountUsdc: number } | null = null;
+  if (typeof fundingTxId === "string" && fundingTxId && userToken) {
+    if (usedFundingTxIds.has(fundingTxId)) {
+      return res.status(402).json({ error: "This funding transaction was already used for a task." });
+    }
+    const v = await verifyFundingTx(userToken, fundingTxId, input.budgetUsdc);
+    if (!v.ok) {
+      return res.status(402).json({ error: `Funding check failed: ${v.reason}` });
+    }
+    usedFundingTxIds.add(fundingTxId);
+    funding = { txId: fundingTxId, from: v.sourceAddress as `0x${string}`, amountUsdc: v.amountUsdc };
+  }
+
   stats.errands++;
   stats.uniqueIps.add(ip);
 
@@ -153,17 +172,42 @@ app.post("/task", async (req, res) => {
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
+  let spentThisTask = 0;
   const send = (e: TaskEvent) => {
-    if (e.type === "paid") stats.settledUsdc += e.paidUsdc;
-    if (e.type === "tipped") stats.tippedUsdc += e.tipUsdc;
+    if (e.type === "paid") {
+      stats.settledUsdc += e.paidUsdc;
+      spentThisTask += e.paidUsdc;
+    }
+    if (e.type === "tipped") {
+      stats.tippedUsdc += e.tipUsdc;
+      spentThisTask += e.tipUsdc;
+    }
     res.write(`data: ${JSON.stringify(e)}\n\n`);
   };
+
+  if (funding) {
+    send({ type: "funded", amountUsdc: funding.amountUsdc, from: funding.from, txId: funding.txId });
+  }
 
   try {
     await runTask(input, send);
   } catch (e) {
     send({ type: "error", error: (e as Error).message });
   } finally {
+    // Return the unspent part of a user-funded budget to the user's wallet.
+    if (funding) {
+      const refund = Number((funding.amountUsdc - spentThisTask).toFixed(6));
+      if (refund >= MIN_REFUND_USDC) {
+        try {
+          const wallet = new AgentWallet(config.agentPrivateKey);
+          const txHash = await wallet.transferUsdc(funding.from, refund);
+          send({ type: "refunded", amountUsdc: refund, to: funding.from, txHash });
+        } catch (e) {
+          console.error(`refund of ${refund} USDC to ${funding.from} failed:`, e);
+          send({ type: "refunded", amountUsdc: refund, to: funding.from, txHash: null });
+        }
+      }
+    }
     res.write("event: end\ndata: {}\n\n");
     res.end();
   }

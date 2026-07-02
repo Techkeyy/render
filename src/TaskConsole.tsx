@@ -19,6 +19,8 @@ type TaskEvent =
   | { type: "tipped"; url: string; publisher: string; publisherWallet: string; tipUsdc: number; settlementId?: string }
   | { type: "render_error"; url: string; error: string }
   | { type: "stop"; reason: string }
+  | { type: "funded"; amountUsdc: number; from: string; txId: string }
+  | { type: "refunded"; amountUsdc: number; to: string; txHash: string | null }
   | { type: "answer"; answer: string; confidence: string; sources?: { url: string; claim: string }[]; data?: Record<string, unknown> | null; spentUsdc: number; returnedUsdc: number; receipt: ReceiptRow[]; verifyUrl?: string }
   | { type: "error"; error: string };
 
@@ -71,15 +73,17 @@ function shortRef(id?: string): string | null {
 
 /** Parse the orchestrator's POST + SSE stream (EventSource is GET-only, so we read the body ourselves). */
 async function streamTask(
-  body: { goal: string; seedUrls: string[]; budgetUsdc: number },
+  body: { goal: string; seedUrls: string[]; budgetUsdc: number; fundingTxId?: string },
   handlers: { onEvent: (e: TaskEvent) => void; onDone: () => void; onError: (m: string) => void },
   signal: AbortSignal,
   walletAddress?: string | null,
+  userToken?: string | null,
 ) {
   let res: Response;
   try {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (walletAddress) headers["x-wallet-address"] = walletAddress;
+    if (userToken) headers["x-user-token"] = userToken;
     res = await fetch(`${ORCH}/task`, {
       method: "POST",
       headers,
@@ -91,7 +95,8 @@ async function streamTask(
     return;
   }
   if (!res.ok || !res.body) {
-    handlers.onError(`Agent returned ${res.status}.`);
+    const err = await res.json().catch(() => ({} as { error?: string }));
+    handlers.onError(err.error || `Agent returned ${res.status}.`);
     return;
   }
 
@@ -132,11 +137,20 @@ async function streamTask(
   }
 }
 
-export default function TaskConsole({ walletAddress }: { walletAddress?: string | null }) {
+interface TaskConsoleProps {
+  walletAddress?: string | null;
+  balance?: string | null;
+  userToken?: string | null;
+  fundTask?: (amountUsdc: number) => Promise<{ txId: string }>;
+  refreshBalance?: () => void;
+}
+
+export default function TaskConsole({ walletAddress, balance, userToken, fundTask, refreshBalance }: TaskConsoleProps) {
   const [goal, setGoal] = useState("");
   const [seeds, setSeeds] = useState("");
   const [budget, setBudget] = useState(0.02);
   const [running, setRunning] = useState(false);
+  const [funding, setFunding] = useState(false);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -252,22 +266,48 @@ export default function TaskConsole({ walletAddress }: { walletAddress?: string 
       return;
     }
 
-    setRunning(true);
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    streamTask(
-      { goal: goal.trim(), seedUrls, budgetUsdc: budget },
-      {
-        onEvent: (e) => setEvents((prev) => [...prev, e]),
-        onDone: () => setRunning(false),
-        onError: (m) => {
-          setError(m);
-          setRunning(false);
+    const startStream = (fundingTxId?: string) => {
+      setRunning(true);
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      streamTask(
+        { goal: goal.trim(), seedUrls, budgetUsdc: budget, fundingTxId },
+        {
+          onEvent: (e) => {
+            setEvents((prev) => [...prev, e]);
+            if (e.type === "refunded") refreshBalance?.();
+          },
+          onDone: () => setRunning(false),
+          onError: (m) => {
+            setError(m);
+            setRunning(false);
+          },
         },
-      },
-      ctrl.signal,
-      walletAddress,
-    );
+        ctrl.signal,
+        walletAddress,
+        userToken,
+      );
+    };
+
+    // Signed-in users fund the errand from their own wallet: PIN-approve a USDC
+    // transfer of the budget to the agent, then the task runs against it.
+    if (walletAddress && fundTask) {
+      if (balance != null && Number(balance) < budget) {
+        setError(
+          `Your wallet has $${balance} USDC — this errand needs $${budget.toFixed(2)}. ` +
+          `Top up free testnet USDC at faucet.circle.com (select Arc Testnet).`,
+        );
+        return;
+      }
+      setFunding(true);
+      fundTask(budget)
+        .then(({ txId }) => startStream(txId))
+        .catch((e) => setError((e as Error).message))
+        .finally(() => setFunding(false));
+      return;
+    }
+
+    startStream();
   }
 
   function stop() {
@@ -382,8 +422,13 @@ export default function TaskConsole({ walletAddress }: { walletAddress?: string 
               Stop
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={run} disabled={!goal.trim()} style={!goal.trim() ? { opacity: 0.5, cursor: "default" } : undefined}>
-              {watchMode ? "Start watching" : "Run the errand"}
+            <button
+              className="btn btn-primary"
+              onClick={run}
+              disabled={!goal.trim() || funding}
+              style={!goal.trim() || funding ? { opacity: 0.5, cursor: "default" } : undefined}
+            >
+              {funding ? "Approving payment…" : watchMode ? "Start watching" : walletAddress && !watchMode ? "Fund & run the errand" : "Run the errand"}
             </button>
           )}
         </div>
@@ -504,9 +549,9 @@ export default function TaskConsole({ walletAddress }: { walletAddress?: string 
             )}
           </div>
           <div className="num" style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 10, lineHeight: 1.5 }}>
-            Each fare is a Circle Gateway settlement on Arc, paid from the agent's own USDC.
-            Fares batch on-chain — “Verify on Arc” opens the agent wallet, where its USDC and
-            its deposit into Circle's Gateway contract are public transactions.
+            {events.some((e) => e.type === "funded")
+              ? "This errand was funded from your own wallet — the budget moved to the agent up front, and whatever it didn't spend came back to you. Each fare is a Circle Gateway settlement on Arc."
+              : "Each fare is a Circle Gateway settlement on Arc, paid from the agent's own USDC. Fares batch on-chain — “Verify on Arc” opens the agent wallet, where its USDC and its deposit into Circle's Gateway contract are public transactions."}
           </div>
         </div>
       )}
@@ -582,6 +627,40 @@ function EventRow({ e }: { e: TaskEvent }) {
           <span className="num" style={{ fontSize: 11, color: "var(--accent)" }} title={`Publisher tip settlement ${e.settlementId}`}>
             {shortRef(e.settlementId)}
           </span>
+        )}
+      </Row>
+    );
+  if (e.type === "funded")
+    return (
+      <Row>
+        <span style={{ fontSize: 11, color: "var(--accent)" }}>funded</span>
+        <span className="num" style={{ fontSize: 12.5, color: "var(--text-2)", flex: 1 }}>
+          by your wallet · ${e.amountUsdc.toFixed(3)} USDC
+        </span>
+        <span className="num" style={{ fontSize: 11, color: "var(--accent)" }} title={`Circle transaction ${e.txId}`}>
+          {shortRef(e.txId)}
+        </span>
+      </Row>
+    );
+  if (e.type === "refunded")
+    return (
+      <Row>
+        <span style={{ fontSize: 11, color: "var(--accent)" }}>refund</span>
+        <span className="num" style={{ fontSize: 12.5, color: "var(--text-2)", flex: 1 }}>
+          ${e.amountUsdc.toFixed(3)} unspent USDC returned to your wallet
+        </span>
+        {e.txHash ? (
+          <a
+            className="num tc-link"
+            href={`https://testnet.arcscan.app/tx/${e.txHash}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 11 }}
+          >
+            {shortRef(e.txHash)} ↗
+          </a>
+        ) : (
+          <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>pending</span>
         )}
       </Row>
     );

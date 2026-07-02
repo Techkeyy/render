@@ -150,7 +150,7 @@ function UseCase({ q, sub }: { q: string; sub: string }) {
 }
 
 export default function App() {
-  const { address: walletAddress, username: walletUsername, balance: walletBalance, loading: walletLoading, signUp, logIn, signOut, configured: walletConfigured, error: walletError } = useWallet();
+  const { address: walletAddress, username: walletUsername, balance: walletBalance, loading: walletLoading, signUp, logIn, signOut, fundTask, refreshBalance, configured: walletConfigured, error: walletError, userToken } = useWallet();
   const [authOpen, setAuthOpen] = useState(false);
   const [authName, setAuthName] = useState("");
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
@@ -380,7 +380,13 @@ export default function App() {
             paid through Circle Gateway from the agent's own on-chain wallet — which you can inspect.
           </p>
         </div>
-        <TaskConsole walletAddress={walletAddress} />
+        <TaskConsole
+          walletAddress={walletAddress}
+          balance={walletBalance}
+          userToken={userToken}
+          fundTask={fundTask}
+          refreshBalance={refreshBalance}
+        />
       </section>
 
       {/* ---------- FOOTER ---------- */}
