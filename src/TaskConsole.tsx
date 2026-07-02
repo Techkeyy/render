@@ -611,9 +611,16 @@ export default function TaskConsole({ walletAddress, balance, userToken, usernam
             <span className="eyebrow">The answer</span>
             <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>confidence · {answer.confidence}</span>
           </div>
-          <p className="serif" style={{ margin: "0 0 22px", fontSize: 24, lineHeight: 1.3, color: "var(--text-1)" }}>
-            {answer.answer}
-          </p>
+          {/* Short answers get the editorial serif; long factual ones get the readable body face. */}
+          {answer.answer.length <= 90 ? (
+            <p className="serif" style={{ margin: "0 0 22px", fontSize: 24, lineHeight: 1.3, color: "var(--text-1)" }}>
+              {answer.answer}
+            </p>
+          ) : (
+            <p style={{ margin: "0 0 22px", fontSize: 16.5, lineHeight: 1.65, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
+              {answer.answer}
+            </p>
+          )}
           {answer.sources && answer.sources.length > 0 && (
             <div style={{ marginBottom: 18, padding: "12px 14px", background: "var(--bg-2)", borderRadius: 8 }}>
               <span className="eyebrow" style={{ fontSize: 10, marginBottom: 8, display: "block" }}>Sources</span>
