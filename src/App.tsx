@@ -428,6 +428,7 @@ export default function App() {
           walletAddress={walletAddress}
           balance={walletBalance}
           userToken={userToken}
+          username={walletUsername}
           fundTask={fundTask}
           refreshBalance={refreshBalance}
         />

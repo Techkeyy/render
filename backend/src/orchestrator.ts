@@ -4,6 +4,7 @@ import { config, requireWallets } from "./config.ts";
 import { AgentWallet } from "./lib/pay.ts";
 import { runTask, type TaskEvent, type TaskInput } from "./runner.ts";
 import authRouter, { verifyFundingTx } from "./auth.ts";
+import { loadStore, store, type TaskRecord, type WatchRecord } from "./store.ts";
 
 requireWallets();
 
@@ -20,43 +21,48 @@ const RATE_WINDOW_MS = 60 * 60 * 1000;
 const MIN_BALANCE_USDC = 0.05;
 const ipHits = new Map<string, number[]>();
 
-// --- Live stats (in-memory — resets on deploy, which is fine for a hackathon) ---
-const stats = {
-  errands: 0,
-  uniqueIps: new Set<string>(),
-  settledUsdc: 0,
-  tippedUsdc: 0,
-};
-
-// --- Watch mode (in-memory, max 5 active watches) ---
-interface Watch {
-  id: string;
-  input: TaskInput;
-  intervalMs: number;
-  createdAt: number;
-  lastRunAt: number | null;
-  lastAnswer: string | null;
-  currentAnswer: string | null;
-  changed: boolean;
-  runs: number;
-  totalSpentUsdc: number;
-  status: "active" | "done";
-  ip: string;
-  timer: ReturnType<typeof setInterval> | null;
+// --- Live stats (persisted via store.ts — survives restarts, and redeploys with Upstash) ---
+function bumpStats(ip: string) {
+  store.data.stats.errands++;
+  if (!store.data.stats.users.includes(ip)) store.data.stats.users.push(ip);
+  store.touch();
 }
+
+/** Username from the x-render-user header (or a query param) — display identity only. */
+function sanitizeUser(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return /^[a-z0-9_.-]{1,32}$/.test(s) ? s : null;
+}
+
+// --- Watch mode (records persisted in the store; timers rebuilt on boot) ---
 const MAX_WATCHES = 5;
 const MAX_WATCH_LIFETIME_MS = 6 * 60 * 60 * 1000;
-const watches = new Map<string, Watch>();
+const watchTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 function watchId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-async function runWatchCycle(w: Watch) {
+function getWatch(id: string): WatchRecord | undefined {
+  return store.data.watches.find((w) => w.id === id);
+}
+
+function scheduleWatch(w: WatchRecord) {
+  watchTimers.set(w.id, setInterval(() => runWatchCycle(w), w.intervalMs));
+}
+
+function stopWatchTimer(id: string) {
+  const t = watchTimers.get(id);
+  if (t) clearInterval(t);
+  watchTimers.delete(id);
+}
+
+async function runWatchCycle(w: WatchRecord) {
   if (w.status !== "active") return;
   if (Date.now() - w.createdAt > MAX_WATCH_LIFETIME_MS) {
     w.status = "done";
-    if (w.timer) clearInterval(w.timer);
+    stopWatchTimer(w.id);
+    store.touch();
     return;
   }
   try {
@@ -64,10 +70,10 @@ async function runWatchCycle(w: Watch) {
     let spent = 0;
     await runTask(w.input, (e) => {
       if (e.type === "paid") {
-        stats.settledUsdc += e.paidUsdc;
+        store.data.stats.settledUsdc += e.paidUsdc;
         spent += e.paidUsdc;
       }
-      if (e.type === "tipped") stats.tippedUsdc += e.tipUsdc;
+      if (e.type === "tipped") store.data.stats.tippedUsdc += e.tipUsdc;
       if (e.type === "answer") answer = e.answer;
     });
     w.lastAnswer = w.currentAnswer;
@@ -76,8 +82,7 @@ async function runWatchCycle(w: Watch) {
     w.runs++;
     w.totalSpentUsdc += spent;
     w.lastRunAt = Date.now();
-    stats.errands++;
-    stats.uniqueIps.add(w.ip);
+    bumpStats(w.ip);
   } catch (e) {
     console.warn(`watch ${w.id} cycle failed: ${(e as Error).message}`);
   }
@@ -98,12 +103,19 @@ app.get("/health", (_req, res) =>
 
 app.get("/stats", (_req, res) =>
   res.json({
-    errands: stats.errands,
-    users: stats.uniqueIps.size,
-    settledUsdc: Number(stats.settledUsdc.toFixed(6)),
-    tippedUsdc: Number(stats.tippedUsdc.toFixed(6)),
+    errands: store.data.stats.errands,
+    users: store.data.stats.users.length,
+    settledUsdc: Number(store.data.stats.settledUsdc.toFixed(6)),
+    tippedUsdc: Number(store.data.stats.tippedUsdc.toFixed(6)),
   }),
 );
+
+// Past errands for a signed-in user: goal, answer, receipt — their account history.
+app.get("/history", (req, res) => {
+  const user = sanitizeUser(req.query.user);
+  if (!user) return res.status(400).json({ error: "user query param required" });
+  res.json(store.data.tasks.filter((t) => t.user === user).slice(0, 20));
+});
 
 // Current spendable balance inside the agent's Gateway wallet.
 app.get("/balance", async (_req, res) => {
@@ -122,6 +134,10 @@ app.get("/balance", async (_req, res) => {
 // Funding transactions already consumed by a task — a tx id pays for one task only.
 const usedFundingTxIds = new Set<string>();
 const MIN_REFUND_USDC = 0.001;
+// Anonymous errands spend the agent's shared wallet, so they stay small.
+// Signed-in users fund their own errands, so their ceiling matches /auth/fund's cap.
+const MAX_BUDGET_ANON = 0.02;
+const MAX_BUDGET_WALLET = 0.5;
 
 app.post("/task", async (req, res) => {
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
@@ -149,6 +165,15 @@ app.post("/task", async (req, res) => {
     outputFields: Array.isArray(outputFields) ? outputFields.filter((f: unknown) => typeof f === "string") : undefined,
   };
 
+  const maxBudget = hasWallet ? MAX_BUDGET_WALLET : MAX_BUDGET_ANON;
+  if (input.budgetUsdc > maxBudget) {
+    return res.status(400).json({
+      error: hasWallet
+        ? `Budget is capped at $${MAX_BUDGET_WALLET.toFixed(2)} per errand.`
+        : `Anonymous errands are capped at $${MAX_BUDGET_ANON.toFixed(2)} — sign in to run bigger ones on your own wallet.`,
+    });
+  }
+
   // --- User-funded task: verify the user's USDC transfer to the agent before running ---
   const userToken = req.headers["x-user-token"] as string | undefined;
   let funding: { txId: string; from: `0x${string}`; amountUsdc: number } | null = null;
@@ -164,8 +189,8 @@ app.post("/task", async (req, res) => {
     funding = { txId: fundingTxId, from: v.sourceAddress as `0x${string}`, amountUsdc: v.amountUsdc };
   }
 
-  stats.errands++;
-  stats.uniqueIps.add(ip);
+  bumpStats(ip);
+  const username = sanitizeUser(req.headers["x-render-user"]);
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -173,15 +198,19 @@ app.post("/task", async (req, res) => {
     Connection: "keep-alive",
   });
   let spentThisTask = 0;
+  let tippedThisTask = 0;
+  let answerEvent: Extract<TaskEvent, { type: "answer" }> | null = null;
   const send = (e: TaskEvent) => {
     if (e.type === "paid") {
-      stats.settledUsdc += e.paidUsdc;
+      store.data.stats.settledUsdc += e.paidUsdc;
       spentThisTask += e.paidUsdc;
     }
     if (e.type === "tipped") {
-      stats.tippedUsdc += e.tipUsdc;
+      store.data.stats.tippedUsdc += e.tipUsdc;
       spentThisTask += e.tipUsdc;
+      tippedThisTask += e.tipUsdc;
     }
+    if (e.type === "answer") answerEvent = e;
     res.write(`data: ${JSON.stringify(e)}\n\n`);
   };
 
@@ -194,6 +223,23 @@ app.post("/task", async (req, res) => {
   } catch (e) {
     send({ type: "error", error: (e as Error).message });
   } finally {
+    // Record the errand in the account history (and the anonymous ledger).
+    // (snapshot: TS can't see the assignment inside the send closure)
+    const a = answerEvent as Extract<TaskEvent, { type: "answer" }> | null;
+    const record: TaskRecord = {
+      id: watchId(),
+      user: username,
+      goal: input.goal,
+      answer: a?.answer ?? null,
+      confidence: a?.confidence ?? null,
+      spentUsdc: Number(spentThisTask.toFixed(6)),
+      tippedUsdc: Number(tippedThisTask.toFixed(6)),
+      funded: !!funding,
+      receipt: a?.receipt ?? [],
+      createdAt: Date.now(),
+    };
+    store.data.tasks.unshift(record);
+    store.touch();
     // Return the unspent part of a user-funded budget to the user's wallet.
     if (funding) {
       const refund = Number((funding.amountUsdc - spentThisTask).toFixed(6));
@@ -215,9 +261,26 @@ app.post("/task", async (req, res) => {
 
 // --- Watch endpoints ---
 
+function watchSummary(w: WatchRecord) {
+  return {
+    id: w.id,
+    goal: w.input.goal,
+    owner: w.owner,
+    status: w.status,
+    changed: w.changed,
+    currentAnswer: w.currentAnswer,
+    runs: w.runs,
+    totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)),
+    intervalMin: w.intervalMs / 60000,
+    lastRunAt: w.lastRunAt,
+    nextRunAt: w.status === "active" ? (w.lastRunAt ?? w.createdAt) + w.intervalMs : null,
+  };
+}
+
 app.post("/watch", async (req, res) => {
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
-  if (watches.size >= MAX_WATCHES) {
+  const active = store.data.watches.filter((w) => w.status === "active");
+  if (active.length >= MAX_WATCHES) {
     return res.status(429).json({ error: `Max ${MAX_WATCHES} active watches. Cancel one first.` });
   }
   const { goal, seedUrls, budgetUsdc, intervalMin } = req.body ?? {};
@@ -231,9 +294,9 @@ app.post("/watch", async (req, res) => {
     budgetUsdc: Number.isFinite(budgetUsdc) && budgetUsdc > 0 ? budgetUsdc : 0.02,
   };
 
-  const id = watchId();
-  const w: Watch = {
-    id,
+  const w: WatchRecord = {
+    id: watchId(),
+    owner: sanitizeUser(req.headers["x-render-user"]),
     input,
     intervalMs: interval * 60 * 1000,
     createdAt: Date.now(),
@@ -245,15 +308,13 @@ app.post("/watch", async (req, res) => {
     totalSpentUsdc: 0,
     status: "active",
     ip,
-    timer: null,
   };
-  watches.set(id, w);
+  store.data.watches.push(w);
+  store.touch();
 
-  // First run immediately
+  // First run immediately, then recurring
   await runWatchCycle(w);
-
-  // Schedule recurring runs
-  w.timer = setInterval(() => runWatchCycle(w), w.intervalMs);
+  scheduleWatch(w);
 
   res.json({
     id: w.id,
@@ -264,46 +325,26 @@ app.post("/watch", async (req, res) => {
   });
 });
 
-app.get("/watches", (_req, res) => {
-  const list = [...watches.values()].map((w) => ({
-    id: w.id,
-    goal: w.input.goal,
-    status: w.status,
-    changed: w.changed,
-    currentAnswer: w.currentAnswer,
-    runs: w.runs,
-    totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)),
-    intervalMin: w.intervalMs / 60000,
-    lastRunAt: w.lastRunAt,
-    nextRunAt: w.status === "active" ? (w.lastRunAt ?? w.createdAt) + w.intervalMs : null,
-  }));
+app.get("/watches", (req, res) => {
+  const user = sanitizeUser(req.query.user);
+  const list = store.data.watches
+    .filter((w) => (user ? w.owner === user : true))
+    .map(watchSummary);
   res.json(list);
 });
 
 app.get("/watch/:id", (req, res) => {
-  const w = watches.get(req.params.id);
+  const w = getWatch(req.params.id);
   if (!w) return res.status(404).json({ error: "watch not found" });
-  res.json({
-    id: w.id,
-    goal: w.input.goal,
-    status: w.status,
-    changed: w.changed,
-    lastAnswer: w.lastAnswer,
-    currentAnswer: w.currentAnswer,
-    runs: w.runs,
-    totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)),
-    intervalMin: w.intervalMs / 60000,
-    lastRunAt: w.lastRunAt,
-    nextRunAt: w.status === "active" ? (w.lastRunAt ?? w.createdAt) + w.intervalMs : null,
-  });
+  res.json({ ...watchSummary(w), lastAnswer: w.lastAnswer });
 });
 
 app.delete("/watch/:id", (req, res) => {
-  const w = watches.get(req.params.id);
+  const w = getWatch(req.params.id);
   if (!w) return res.status(404).json({ error: "watch not found" });
-  if (w.timer) clearInterval(w.timer);
-  w.status = "done";
-  watches.delete(w.id);
+  stopWatchTimer(w.id);
+  store.data.watches = store.data.watches.filter((x) => x.id !== w.id);
+  store.touch();
   res.json({ cancelled: true, id: w.id, runs: w.runs, totalSpentUsdc: Number(w.totalSpentUsdc.toFixed(6)) });
 });
 
@@ -331,5 +372,19 @@ app.listen(config.orchestratorPort, async () => {
   console.log(`  agent          : ${config.agentAddress}`);
   console.log(`  render service : ${config.renderServiceUrl}`);
   console.log(`  plan model     : ${config.modelPlan}   loop model: ${config.modelLoop}`);
+  await loadStore();
+  // Resume watches that were active before the restart.
+  let resumed = 0;
+  for (const w of store.data.watches) {
+    if (w.status !== "active") continue;
+    if (Date.now() - w.createdAt > MAX_WATCH_LIFETIME_MS) {
+      w.status = "done";
+      continue;
+    }
+    scheduleWatch(w);
+    resumed++;
+  }
+  if (resumed) console.log(`  watches        : resumed ${resumed}`);
+  store.touch();
   await ensureFunded();
 });

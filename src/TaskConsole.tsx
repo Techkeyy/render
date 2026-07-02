@@ -42,8 +42,22 @@ const EXAMPLES: { label: string; goal: string; seeds: string[]; budget: number }
   },
 ];
 
-const BUDGETS = [0.01, 0.02, 0.05];
+// Anonymous errands spend the agent's shared wallet, so they're capped at $0.02.
+// Signed-in users fund their own — bigger budgets unlock with an account.
+const BUDGETS = [0.01, 0.02, 0.05, 0.1];
+const MAX_BUDGET_ANON = 0.02;
 const WATCH_INTERVALS = [15, 30, 60];
+
+interface HistoryItem {
+  id: string;
+  goal: string;
+  answer: string | null;
+  confidence: string | null;
+  spentUsdc: number;
+  funded: boolean;
+  receipt: { url: string; paidUsdc: number }[];
+  createdAt: number;
+}
 
 interface WatchInfo {
   id: string;
@@ -78,12 +92,14 @@ async function streamTask(
   signal: AbortSignal,
   walletAddress?: string | null,
   userToken?: string | null,
+  username?: string | null,
 ) {
   let res: Response;
   try {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (walletAddress) headers["x-wallet-address"] = walletAddress;
     if (userToken) headers["x-user-token"] = userToken;
+    if (username) headers["x-render-user"] = username;
     res = await fetch(`${ORCH}/task`, {
       method: "POST",
       headers,
@@ -141,11 +157,12 @@ interface TaskConsoleProps {
   walletAddress?: string | null;
   balance?: string | null;
   userToken?: string | null;
+  username?: string | null;
   fundTask?: (amountUsdc: number) => Promise<{ txId: string }>;
   refreshBalance?: () => void;
 }
 
-export default function TaskConsole({ walletAddress, balance, userToken, fundTask, refreshBalance }: TaskConsoleProps) {
+export default function TaskConsole({ walletAddress, balance, userToken, username, fundTask, refreshBalance }: TaskConsoleProps) {
   const [goal, setGoal] = useState("");
   const [seeds, setSeeds] = useState("");
   const [budget, setBudget] = useState(0.02);
@@ -161,6 +178,22 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
   // Signed-in users choose who funds the errand: their own wallet (a real
   // PIN-approved USDC transfer, refunded if unspent) or the agent's wallet.
   const [payFromMyWallet, setPayFromMyWallet] = useState(true);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Account errand history — past answers + receipts, kept server-side.
+  useEffect(() => {
+    if (!username) {
+      setHistory([]);
+      return;
+    }
+    let live = true;
+    fetch(`${ORCH}/history?user=${encodeURIComponent(username)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => { if (live) setHistory(list); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [username, running]);
 
   useEffect(() => {
     let live = true;
@@ -194,6 +227,15 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
   useEffect(() => {
     let live = true;
     const load = () => {
+      // Signed in: watches live under the account and follow you across devices.
+      if (username) {
+        fetch(`${ORCH}/watches?user=${encodeURIComponent(username)}`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((list: WatchInfo[]) => { if (live) setActiveWatches(list); })
+          .catch(() => {});
+        return;
+      }
+      // Anonymous: fall back to the ids this browser remembers.
       const myIds = getMyWatchIds();
       if (!myIds.length) { setActiveWatches([]); return; }
       Promise.all(myIds.map((id) =>
@@ -209,7 +251,7 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
     load();
     const id = setInterval(load, 15_000);
     return () => { live = false; clearInterval(id); };
-  }, []);
+  }, [username]);
 
   const plan = events.find((e) => e.type === "plan") as Extract<TaskEvent, { type: "plan" }> | undefined;
   const answer = events.find((e) => e.type === "answer") as Extract<TaskEvent, { type: "answer" }> | undefined;
@@ -236,10 +278,17 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
       .map((s) => s.trim())
       .filter(Boolean);
 
+    // Anonymous budget ceiling — the server enforces this too.
+    if (!walletAddress && budget > MAX_BUDGET_ANON) {
+      setError(`Anonymous errands are capped at $${MAX_BUDGET_ANON.toFixed(2)} — sign in to run bigger ones on your own wallet.`);
+      return;
+    }
+
     if (watchMode) {
       setRunning(true);
       const watchHeaders: Record<string, string> = { "content-type": "application/json" };
       if (walletAddress) watchHeaders["x-wallet-address"] = walletAddress;
+      if (username) watchHeaders["x-render-user"] = username;
       fetch(`${ORCH}/watch`, {
         method: "POST",
         headers: watchHeaders,
@@ -249,7 +298,7 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
         .then((d) => {
           if (d.error) setError(d.error);
           else {
-            if (d.id) saveWatchId(d.id);
+            if (d.id && !username) saveWatchId(d.id);
             setEvents([{
               type: "answer",
               answer: d.currentAnswer ?? "Watch started — first result incoming.",
@@ -258,10 +307,17 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
               returnedUsdc: budget,
               receipt: [],
             }]);
-            const myIds = getMyWatchIds();
-            Promise.all(myIds.map((id) =>
-              fetch(`${ORCH}/watch/${id}`).then(r => r.ok ? r.json() : null).catch(() => null)
-            )).then((results) => setActiveWatches(results.filter((w): w is WatchInfo => w !== null))).catch(() => {});
+            if (username) {
+              fetch(`${ORCH}/watches?user=${encodeURIComponent(username)}`)
+                .then((r) => (r.ok ? r.json() : []))
+                .then(setActiveWatches)
+                .catch(() => {});
+            } else {
+              const myIds = getMyWatchIds();
+              Promise.all(myIds.map((id) =>
+                fetch(`${ORCH}/watch/${id}`).then(r => r.ok ? r.json() : null).catch(() => null)
+              )).then((results) => setActiveWatches(results.filter((w): w is WatchInfo => w !== null))).catch(() => {});
+            }
           }
         })
         .catch((e) => setError((e as Error).message))
@@ -289,6 +345,7 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
         ctrl.signal,
         walletAddress,
         userToken,
+        username,
       );
     };
 
@@ -370,21 +427,26 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="eyebrow">The leash</span>
             <div style={{ display: "flex", gap: 6 }}>
-              {BUDGETS.map((b) => (
-                <button
-                  key={b}
-                  onClick={() => setBudget(b)}
-                  className="num"
-                  style={{
-                    cursor: "pointer", padding: "7px 13px", borderRadius: 999, fontSize: 12.5,
-                    border: "1px solid " + (budget === b ? "var(--accent-border)" : "var(--border-strong)"),
-                    background: budget === b ? "var(--accent-dim)" : "transparent",
-                    color: budget === b ? "var(--accent)" : "var(--text-2)",
-                  }}
-                >
-                  ${b.toFixed(2)}
-                </button>
-              ))}
+              {BUDGETS.map((b) => {
+                const locked = !walletAddress && b > MAX_BUDGET_ANON;
+                return (
+                  <button
+                    key={b}
+                    onClick={() => !locked && setBudget(b)}
+                    className="num"
+                    title={locked ? "Sign in to unlock bigger budgets — funded from your own wallet" : undefined}
+                    style={{
+                      cursor: locked ? "not-allowed" : "pointer", padding: "7px 13px", borderRadius: 999, fontSize: 12.5,
+                      border: "1px solid " + (budget === b ? "var(--accent-border)" : "var(--border-strong)"),
+                      background: budget === b ? "var(--accent-dim)" : "transparent",
+                      color: locked ? "var(--text-3)" : budget === b ? "var(--accent)" : "var(--text-2)",
+                      opacity: locked ? 0.55 : 1,
+                    }}
+                  >
+                    ${b.toFixed(2)}{locked ? " 🔒" : ""}
+                  </button>
+                );
+              })}
             </div>
           </div>
           {walletAddress && (
@@ -618,6 +680,48 @@ export default function TaskConsole({ walletAddress, balance, userToken, fundTas
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ---------- account errand history ---------- */}
+      {username && history.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            className="eyebrow"
+            style={{ cursor: "pointer", background: "none", border: "none", padding: 0, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}
+          >
+            Your errands <span className="num" style={{ color: "var(--text-3)" }}>({history.length})</span>
+            <span style={{ fontSize: 10 }}>{historyOpen ? "▴" : "▾"}</span>
+          </button>
+          {historyOpen && (
+            <div style={{ display: "grid", gap: 10 }}>
+              {history.map((h) => (
+                <div key={h.id} className="card" style={{ padding: "16px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                    <span style={{ fontFamily: "var(--font-serif)", fontSize: 15.5, color: "var(--text-1)" }}>
+                      "{h.goal.length > 70 ? h.goal.slice(0, 67) + "…" : h.goal}"
+                    </span>
+                    <span className="num" style={{ fontSize: 11, color: "var(--text-3)", flexShrink: 0, marginLeft: 12 }}>
+                      {new Date(h.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  {h.answer && (
+                    <p style={{ margin: "0 0 8px", fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.45 }}>
+                      {h.answer.length > 220 ? h.answer.slice(0, 217) + "…" : h.answer}
+                    </p>
+                  )}
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    <span className="num" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                      {h.receipt.length} page{h.receipt.length === 1 ? "" : "s"} · spent ${h.spentUsdc.toFixed(3)}
+                    </span>
+                    {h.funded && <span className="num" style={{ fontSize: 11.5, color: "var(--accent)" }}>funded by you</span>}
+                    {h.confidence && <span className="num" style={{ fontSize: 11.5, color: "var(--text-3)" }}>confidence · {h.confidence}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
