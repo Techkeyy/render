@@ -45,6 +45,16 @@ export default function PublishersPage() {
     }).catch(() => {});
   }
 
+  function downloadFile() {
+    const blob = new Blob([fileJson + "\n"], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "x402.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function verify() {
     if (!domain.trim() || verifying) return;
     setVerifying(true);
@@ -98,21 +108,36 @@ export default function PublishersPage() {
             </div>
           )}
           <div style={{ padding: "14px 16px", background: "var(--bg-2)", borderRadius: 8, marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>https://yoursite.com/.well-known/x402.json</span>
-              <button
-                onClick={copyFile}
-                className="num tc-link"
-                style={{ fontSize: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                {copied ? "Copied ✓" : "Copy"}
-              </button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
+              <span className="num" style={{ fontSize: 11, color: "var(--text-3)" }}>x402.json</span>
+              <span style={{ display: "flex", gap: 14 }}>
+                <button
+                  onClick={downloadFile}
+                  className="num tc-link"
+                  style={{ fontSize: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  Download file
+                </button>
+                <button
+                  onClick={copyFile}
+                  className="num tc-link"
+                  style={{ fontSize: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  {copied ? "Copied ✓" : "Copy"}
+                </button>
+              </span>
             </div>
             <pre className="num" style={{ margin: 0, fontSize: 12.5, color: "var(--text-1)", whiteSpace: "pre-wrap" }}>{fileJson}</pre>
           </div>
-          <p style={{ fontSize: 13.5, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
-            Host it at <span className="num" style={{ fontSize: 12.5 }}>/.well-known/x402.json</span> on your domain —
-            a static file, same as robots.txt. GitHub Pages, Netlify, nginx, anything works.
+          <p style={{ fontSize: 13.5, color: "var(--text-3)", margin: "0 0 8px", lineHeight: 1.5 }}>
+            <strong style={{ color: "var(--text-2)" }}>Then put the file on your website yourself</strong> — render can't
+            install it for you; hosting it on your domain is how you prove you own the site. It must end up reachable at{" "}
+            <span className="num" style={{ fontSize: 12.5 }}>https://YOUR-DOMAIN/.well-known/x402.json</span>.
+          </p>
+          <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.6 }}>
+            Next.js / Vite / CRA: save it as <span className="num" style={{ fontSize: 12 }}>public/.well-known/x402.json</span> and redeploy ·
+            GitHub Pages: same path + an empty <span className="num" style={{ fontSize: 12 }}>.nojekyll</span> file ·
+            own server: drop it wherever static files live.
           </p>
         </div>
 
